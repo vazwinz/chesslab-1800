@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+.venv/
+venv/
+node_modules/
+frontend/dist/
+.env
+lichess_db_puzzle.csv*
+!backend/tests/fixtures/*
