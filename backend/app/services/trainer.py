@@ -60,8 +60,8 @@ def _new_attempt(db: Session, sess: TrainingSession, mode: str, p: Puzzle | None
         a.concept = a.concept or puzzles.primary_concept(p.themes)
         a.expected_score = expected_score(r, p.rating, p.rating_deviation)
     if gm is not None:
+        # own-game positions are not a puzzle concept, so they stay out of the retention scheduler
         a.exercise_kind, a.game_mistake_id, a.solution_len = "game_position", gm.id, 1
-        a.concept = a.concept or f"game:{gm.category}"
     db.add(a)
     sess.last_activity_at = utcnow()
     db.flush()
