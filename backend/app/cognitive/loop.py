@@ -17,6 +17,7 @@ from .error_dna import recurring_patterns
 
 BASELINE_N = 20
 REASSESS_N = 20
+PRACTICE_N = 30
 GAME_MIN_GAMES, GAME_MIN_MOVES = 3, 100
 NON_TARGETED_MODES = ("standard", "assessment", "retention")
 
@@ -97,7 +98,7 @@ def advance(db: Session, rng: random.Random | None = None) -> LoopCycle:
                    "games": game_category_rate(db, top["category"])}
             c.diagnosis = {"target": top["category"], "theme": theme, "patterns": pats["patterns"][:8]}
             _log(c, "diagnose", f"target = {top['category']}", theme=theme)
-            a = iv.start_assignment(db, top["category"], theme, c.id, pre, rng)
+            a = iv.start_assignment(db, top["category"], theme, c.id, pre, rng, target=PRACTICE_N)
             c.assignment_id = a.id
             c.phase = "practice"
             _log(c, "intervene", f"assigned {a.intervention_key}", draws=a.params.get("draws"))

@@ -440,7 +440,7 @@ def finish(db: Session, a: Attempt, correct: bool, total_ms: int, hesitation: di
     if not correct:
         cat, detail = _classify_failure(db, a, gave_up)
         a.error_category, a.error_detail = cat, detail
-        out["error"] = {"category": cat, "label": CATEGORIES[cat], "evidence": detail}
+        out["error_dna"] = {"category": cat, "label": CATEGORIES[cat], "evidence": detail}
     # retention
     median = _median_ms(db, a.puzzle_rating)
     hes = (a.hesitation or {}).get("selection_changes", 0) >= 3

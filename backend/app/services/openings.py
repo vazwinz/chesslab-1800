@@ -61,7 +61,7 @@ def structure(fen: str) -> dict:
         c = Counter(files)
         isolated = [chess.FILE_NAMES[f] for f in c if (f - 1 not in c and f + 1 not in c)]
         doubled = [chess.FILE_NAMES[f] for f, n in c.items() if n > 1]
-        opp = [chess.square_file(s) for s in b.pieces(chess.PAWN, not color)]
+        [chess.square_file(s) for s in b.pieces(chess.PAWN, not color)]
         passed = []
         for s in b.pieces(chess.PAWN, color):
             f, r = chess.square_file(s), chess.square_rank(s)
