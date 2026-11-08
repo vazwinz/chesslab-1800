@@ -194,3 +194,28 @@ def test_endgame_positions_and_engine_reply(client):
     pos = next(p for p in POSITIONS if p["id"] == "kq_k")
     r = client.post("/api/endgames/move", json={"position_id": "kq_k", "fen": pos["fen"], "uci": "h1h5", "depth": 8}).json()
     assert r["move"] and chess.Board(r["fen"]).turn == chess.WHITE
+
+
+def test_incremental_import_updates_ratings_and_themes(db, tmp_path):
+    import csv
+    import io
+
+    import zstandard
+
+    import_puzzles(db, PUZZLE_FIXTURE)
+    text = zstandard.ZstdDecompressor().decompress(PUZZLE_FIXTURE.read_bytes(), max_output_size=10**7).decode()
+    rows = list(csv.reader(io.StringIO(text)))
+    rows[1][3] = "2345"           # new rating in a newer dump
+    rows[1][7] = "fork short"     # changed themes
+    rows[2][3] = "999"            # rating only
+    newer = tmp_path / "newer_dump.csv"
+    with open(newer, "w", newline="") as fh:
+        csv.writer(fh).writerows(rows[:3])
+    job = import_puzzles(db, newer)
+    assert job.updated == 2 and job.inserted == 0
+    db.expire_all()
+    p1, p2 = db.get(Puzzle, rows[1][0]), db.get(Puzzle, rows[2][0])
+    assert p1.rating == 2345 and p1.themes == "fork short" and p2.rating == 999
+    themes = {t.theme: t.rating for t in db.execute(select(PuzzleTheme).where(PuzzleTheme.puzzle_id == p1.id)).scalars()}
+    assert themes == {"fork": 2345, "short": 2345}
+    assert {t.rating for t in db.execute(select(PuzzleTheme).where(PuzzleTheme.puzzle_id == p2.id)).scalars()} == {999}

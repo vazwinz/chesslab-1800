@@ -55,7 +55,7 @@ export default function Openings() {
       <div className="muted text-sm">Build a repertoire, drill it, and study the middlegame structure each line leads to. Write your own plans — understanding beats memorisation.</div>
       {err && <div className="card text-sm text-bad">{err}</div>}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           <div className="card flex flex-wrap gap-2">
             <input className="input flex-1" placeholder="New repertoire name" value={name} onChange={(e) => setName(e.target.value)} />
             <select className="input w-28" value={color} onChange={(e) => setColor(e.target.value)}><option value="white">White</option><option value="black">Black</option></select>
@@ -87,13 +87,13 @@ export default function Openings() {
             {mistakes.length === 0 ? <div className="muted">None recorded.</div> : <ul className="mt-1 text-sm">{mistakes.map((m) => <li key={`${m.line_id}-${m.ply}`}>{m.line}, move {Math.floor(m.ply / 2) + 1}: expected <span className="font-mono">{m.expected_san}</span> — wrong {m.wrong}/{m.n}</li>)}</ul>}
           </div>
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           {drill && (<>
             <Board fen={drill.fen} orientation={drill.color as any} onMove={onDrillMove} disabled={drill.ply >= drill.line.moves_uci.length} />
             <div className="text-sm">{drill.feedback ?? "Play your repertoire move."}</div>
           </>)}
           {study && (
-            <div className="space-y-2">
+            <div className="min-w-0 space-y-2">
               <Board fen={study.final_fen} disabled />
               <div className="card space-y-2 text-sm">
                 <div className="label">Structure</div>

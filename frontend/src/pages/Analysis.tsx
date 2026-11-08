@@ -78,7 +78,7 @@ export default function Analysis() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,640px)_1fr]">
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2">
         <Board fen={fen} orientation={orientation} onMove={onMove} lastMove={lm} />
         <div className="flex flex-wrap gap-2">
           <button className="btn" onClick={() => setCursor(0)}>⏮</button>
@@ -91,7 +91,7 @@ export default function Analysis() {
           {status && <span className="chip self-center border-warn/50 text-warn">{status}</span>}
         </div>
       </div>
-      <div className="space-y-3">
+      <div className="min-w-0 space-y-3">
         {err && <div className="card text-sm text-bad">{err}</div>}
         <div className="card space-y-2">
           <div className="flex flex-wrap items-end gap-2">

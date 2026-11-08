@@ -30,7 +30,8 @@ function Shell() {
         <div className="flex items-center justify-between px-4 py-3 md:block">
           <div className="font-semibold tracking-tight">Chess<span className="text-accent">Lab</span> 1800</div>
           <div className="text-xs text-ink-400 md:mt-1">
-            <span className={health?.engine?.ok ? "text-good" : "text-bad"}>●</span> {health?.engine?.ok ? health.engine.name : "engine offline"}
+            <span className={health == null ? "text-ink-400" : health?.engine?.ok ? "text-good" : "text-bad"}>●</span>{" "}
+            {health == null ? "checking engine…" : health?.engine?.ok ? health.engine.name : "engine offline"}
             {puzzles != null && <span className="ml-2 md:ml-0 md:block">{puzzles.toLocaleString()} puzzles</span>}
           </div>
         </div>

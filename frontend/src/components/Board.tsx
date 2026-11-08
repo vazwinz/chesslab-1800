@@ -33,7 +33,7 @@ export default function Board({ fen, orientation = "white", onMove, disabled, la
   const [promo, setPromo] = useState<{ from: Square; to: Square } | null>(null);
   const hes = useRef<Hesitation>({ selection_changes: 0, cancelled_drags: 0, piece_selections: 0 });
   const wrap = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(480);
+  const [width, setWidth] = useState(0);
 
   useEffect(() => {
     setSelected(null);
@@ -43,7 +43,9 @@ export default function Board({ fen, orientation = "white", onMove, disabled, la
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setWidth(Math.min(el.clientWidth, 640)));
+    const measure = () => setWidth(Math.max(200, Math.min(el.clientWidth, 640)));
+    measure();
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -139,8 +141,8 @@ export default function Board({ fen, orientation = "white", onMove, disabled, la
   }, [hidePieces]);
 
   return (
-    <div ref={wrap} className="relative w-full max-w-[640px] select-none">
-      <Chessboard
+    <div ref={wrap} className="relative w-full min-w-0 max-w-[640px] select-none" style={{ minHeight: width || undefined }}>
+      {width > 0 && <Chessboard
         id="main"
         position={fen}
         boardWidth={width}
@@ -154,7 +156,7 @@ export default function Board({ fen, orientation = "white", onMove, disabled, la
         customBoardStyle={{ borderRadius: 6, boxShadow: "0 6px 24px rgba(0,0,0,.45)" }}
         animationDuration={150}
         customPieces={emptyPieces as any}
-      />
+      />}
       {promo && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/50">
           <div className="card flex gap-2">

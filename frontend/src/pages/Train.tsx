@@ -234,7 +234,7 @@ export default function Train() {
   const boardDisabled = !!result || busy || locked || (ex?.candidates && !candsDone) || !ex;
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,640px)_1fr]">
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2">
         {ex && (
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="chip">{ex.mode}</span>
@@ -261,7 +261,7 @@ export default function Train() {
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="min-w-0 space-y-3">
         {error && <div className="card border-bad/50 text-sm text-bad">{error}</div>}
         {ex && !result && (
           <div className="card space-y-3">
@@ -274,14 +274,14 @@ export default function Train() {
             </div>
             {locked && <div className="rounded border border-warn/40 bg-warn/10 p-2 text-sm text-warn">Board locked — scan checks, captures and threats. {(((ex.min_think_ms ?? 0) - elapsed) / 1000).toFixed(0)}s</div>}
             {ex.candidates && !candsDone && (
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <div className="label">Your candidate moves (SAN, up to 3)</div>
                 <input className="input font-mono" placeholder="e.g. Nxf7 Qh5 Rd1" value={cands} onChange={(e) => setCands(e.target.value)} />
                 <button className="btn-primary" onClick={submitCands}>Lock candidates</button>
               </div>
             )}
             {ex.blind && (
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <div className="label">Blind calculation — write your moves (SAN), opponent replies are automatic</div>
                 <textarea className="input h-20 font-mono" placeholder="e.g. Qxh7+ Kxh7 Rh3+ … (only your moves are required)" value={line} onChange={(e) => setLine(e.target.value)} />
                 <button className="btn-primary" onClick={submitLine} disabled={!line.trim() || busy}>Submit line</button>
@@ -297,7 +297,7 @@ export default function Train() {
 
 function Feedback({ r, onStep }: { r: any; onStep: (i: number) => void }) {
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       <div className={`card ${r.correct ? "border-good/50" : "border-bad/50"}`}>
         <div className={`text-lg font-semibold ${r.correct ? "text-good" : "text-bad"}`}>
           {r.correct ? "Correct" : r.timed_out ? "Time ran out" : "Not the best move"}

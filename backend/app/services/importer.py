@@ -16,11 +16,12 @@ from pathlib import Path
 from typing import Callable
 
 import chess
-from sqlalchemy import select
+from sqlalchemy import bindparam, delete, insert, select, update
 from sqlalchemy.orm import Session
 
 from ..models import ImportJob, Puzzle, PuzzleTheme, utcnow
 
+UPDATABLE = ("rating", "rating_deviation", "popularity", "nb_plays", "game_url", "opening_tags", "solution_len")
 EXPECTED_HEADER = ["PuzzleId", "FEN", "Moves", "Rating", "RatingDeviation", "Popularity", "NbPlays",
                    "Themes", "GameUrl", "OpeningTags"]
 
@@ -131,25 +132,38 @@ def import_puzzles(db: Session, path: Path, batch_size: int = 5000, limit: int |
 
 def _flush(db: Session, batch: list[dict], job: ImportJob) -> None:
     ids = [r["id"] for r in batch]
-    existing = {p.id: p for p in db.execute(select(Puzzle).where(Puzzle.id.in_(ids))).scalars()}
+    existing = {pid: (themes, rk, rating) for pid, themes, rk, rating in db.execute(
+        select(Puzzle.id, Puzzle.themes, Puzzle.rand_key, Puzzle.rating).where(Puzzle.id.in_(ids)))}
+    new_rows, theme_rows, upd_rows, theme_rating_rows = [], [], [], []
     for rec in batch:
-        p = existing.get(rec["id"])
-        if p is None:
+        old = existing.get(rec["id"])
+        if old is None:
             rk = random.random()
-            db.add(Puzzle(rand_key=rk, **rec))
-            for theme in set(rec["themes"].split()):
-                db.add(PuzzleTheme(puzzle_id=rec["id"], theme=theme, rating=rec["rating"], rand_key=rk))
+            new_rows.append({**rec, "rand_key": rk})
+            theme_rows.extend({"puzzle_id": rec["id"], "theme": t, "rating": rec["rating"], "rand_key": rk}
+                              for t in set(rec["themes"].split()))
             job.inserted += 1
-        else:
-            for k in ("rating", "rating_deviation", "popularity", "nb_plays", "game_url", "opening_tags"):
-                setattr(p, k, rec[k])
-            if p.themes != rec["themes"]:
-                db.query(PuzzleTheme).filter(PuzzleTheme.puzzle_id == p.id).delete()
-                db.flush()
-                for theme in set(rec["themes"].split()):
-                    db.add(PuzzleTheme(puzzle_id=p.id, theme=theme, rating=rec["rating"], rand_key=p.rand_key))
-                p.themes = rec["themes"]
-            else:
-                db.query(PuzzleTheme).filter(PuzzleTheme.puzzle_id == p.id).update({"rating": rec["rating"]})
-            job.updated += 1
+            continue
+        old_themes, rk, old_rating = old
+        upd_rows.append({"b_id": rec["id"], **{k: rec[k] for k in UPDATABLE}, "themes": rec["themes"]})
+        if old_themes != rec["themes"]:  # rare: rebuild this puzzle's theme rows
+            db.execute(delete(PuzzleTheme).where(PuzzleTheme.puzzle_id == rec["id"]))
+            theme_rows.extend({"puzzle_id": rec["id"], "theme": t, "rating": rec["rating"], "rand_key": rk}
+                              for t in set(rec["themes"].split()))
+        elif old_rating != rec["rating"]:
+            theme_rating_rows.append({"b_id": rec["id"], "rating": rec["rating"]})
+        job.updated += 1
+    # bulk executemany statements: far faster than one ORM object per row
+    if new_rows:
+        db.execute(insert(Puzzle), new_rows)
+    if theme_rows:
+        db.execute(insert(PuzzleTheme), theme_rows)
+    if upd_rows:
+        db.connection().execute(
+            update(Puzzle).where(Puzzle.id == bindparam("b_id"))
+            .values({k: bindparam(k) for k in (*UPDATABLE, "themes")}), upd_rows)
+    if theme_rating_rows:
+        db.connection().execute(
+            update(PuzzleTheme).where(PuzzleTheme.puzzle_id == bindparam("b_id")).values(rating=bindparam("rating")),
+            theme_rating_rows)
     db.commit()

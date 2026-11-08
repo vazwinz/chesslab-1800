@@ -34,7 +34,7 @@ export default function Endgames() {
   const orient = cur ? (new Chess(cur.fen).turn() === "w" ? "white" : "black") : "white";
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,640px)]">
-      <div className="space-y-3">
+      <div className="min-w-0 space-y-3">
         <h1>Endgames</h1>
         <div className="muted text-sm">Play textbook positions against Stockfish until the goal is reached. For more, train <Link className="text-accent" to="/train">endgame puzzles</Link> from the Lichess database.</div>
         {modules.map((m) => (
@@ -46,7 +46,7 @@ export default function Endgames() {
           </div>
         ))}
       </div>
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2">
         {cur ? (<>
           <Board fen={fen} orientation={orient} onMove={onMove} disabled={busy || done} lastMove={last} />
           <div className="card text-sm"><b>{cur.title}</b> — goal: {cur.goal} as {orient}. <span className="text-ink-400">{cur.hint}</span>
