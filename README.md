@@ -70,7 +70,7 @@ bash scripts/run.sh                   # http://127.0.0.1:8000
 cd backend && .venv/bin/python -m pytest -q          # Windows: .venv\Scripts\python.exe -m pytest -q
 ```
 
-There are 30 tests covering legality, the importer (streaming, validation, incremental updates), engine communication (real Stockfish), persistence across restarts, the API, Error DNA, retention, interventions, a full closed-loop cycle, fatigue, pressure and prediction. Tests that need Stockfish are skipped when it is missing.
+There are 40 tests covering legality, the importer (streaming, validation, incremental updates), engine communication (real Stockfish), persistence across restarts, the API, Error DNA, retention, interventions, a full closed-loop cycle, fatigue, pressure and prediction, plus the endgame goals checked against Stockfish. Tests that need Stockfish are skipped when it is missing.
 
 The browser smoke test needs Playwright (`npm i -D playwright && npx playwright install chromium`). Start the server, then run `node frontend/e2e/smoke.mjs http://127.0.0.1:8000 .`.
 
