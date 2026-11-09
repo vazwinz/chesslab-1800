@@ -1,4 +1,4 @@
-# ChessLab 1800 — one-time setup on Windows (PowerShell). Run from the repo root:
+﻿# ChessLab 1800 — one-time setup on Windows (PowerShell). Run from the repo root:
 #   powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot

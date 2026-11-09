@@ -209,6 +209,9 @@ def move_facts(board: chess.Board, move: chess.Move, prev_move: chess.Move | Non
             if m is not None:
                 f.threatens_mate = null.san(m)
     if f.mate:
+        # the game ends here: a fork, pin or skewer made by the mating move is beside the point
+        f.fork, f.pins, f.skewers, f.discovered, f.attacks_unprotected = [], [], [], [], []
+        f.motifs = [m for m in f.motifs if m not in ("fork", "pin", "skewer", "discoveredAttack")]
         f.motifs.append("mate")
         if _back_rank_mate(after):
             f.motifs.append("backRankMate")

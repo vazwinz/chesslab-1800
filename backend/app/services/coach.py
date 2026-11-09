@@ -288,7 +288,7 @@ def build(board: chess.Board, g: Gathered, ctx: dict | None = None) -> dict:
         nb = _null_board(board)
         tmv = chess.Move.from_uci(g.threat["uci"])
         tf = move_facts(nb, tmv)
-        what = ", ".join(tf.tags) if tf.tags else "uma jogada forte"
+        what = ", ".join(tf.tags) if tf.tags else "um lance forte"
         mate = g.threat.get("mate")
         mate_note = f", que leva a mate em {mate}" if mate and mate > 0 and not (mate == 1 and tf.mate) else ""
         threat_txt = f"Atenção à ameaça do adversário: {M(g.threat['san'])} ({what}){mate_note}."

@@ -78,7 +78,7 @@ def database_state(conn: Connection) -> dict:
 def backup_sqlite(db_path: Path, backup_dir: Path, label: str) -> Path:
     backup_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    dest = backup_dir / f"chesslab-antes-de-{label}-{stamp}.db"
+    dest = backup_dir / f"chesslab-copia-{label}-{stamp}.db"
     src = sqlite3.connect(str(db_path))
     dst = sqlite3.connect(str(dest))
     try:
@@ -86,7 +86,8 @@ def backup_sqlite(db_path: Path, backup_dir: Path, label: str) -> Path:
     finally:
         dst.close()
         src.close()
-    old = sorted(backup_dir.glob("chesslab-antes-de-*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+    old = sorted(list(backup_dir.glob("chesslab-copia-*.db")) + list(backup_dir.glob("chesslab-antes-de-*.db")),
+                 key=lambda p: p.stat().st_mtime, reverse=True)
     for p in old[KEEP_BACKUPS:]:
         try:
             p.unlink()
@@ -134,7 +135,7 @@ def _repair_legacy(conn: Connection) -> list[str]:
     return fixes
 
 
-def run_migrations(url: str, backup_dir: Path | None = None, label: str = "atualizacao") -> dict:
+def run_migrations(url: str, backup_dir: Path | None = None, label: str = "antes-da-atualizacao") -> dict:
     """Bring the database at `url` to the newest schema. Returns a small report."""
     mig = _migration_engine(url)
     try:

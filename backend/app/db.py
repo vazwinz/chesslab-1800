@@ -60,7 +60,8 @@ def init_db() -> dict:
     backups = db_file.parent / "backups" if db_file is not None else None
     with SessionLocal() as s:
         previous = _previous_version(s)
-    report = run_migrations(database_url, backup_dir=backups, label=previous or "0.3.0")
+    # the copy is named after the version whose data it holds: chesslab-copia-da-0.3.0-<data>.db
+    report = run_migrations(database_url, backup_dir=backups, label=f"da-{previous or '0.3.0'}")
     with SessionLocal() as s:
         from .models import KV
 

@@ -184,3 +184,51 @@ def test_dashboard_days_follow_local_time(client, monkeypatch):
         monkeypatch.delenv("TZ", raising=False)
         time.tzset()
         os.environ.pop("TZ", None)
+
+
+def test_band_follows_an_established_rating_but_not_a_provisional_one(db):
+    """Everyone starts in the first band; an established rating far above it moves the band there."""
+    from app.models import RatingPoint
+    from app.services import adaptive
+
+    assert adaptive.band_for(db)["index"] == 0
+    db.add(RatingPoint(rating=1700, rd=300))  # provisional: a few lucky puzzles must not jump bands
+    db.flush()
+    assert adaptive.update_after_attempt(db) is None
+    db.add(RatingPoint(rating=1272, rd=60))
+    db.flush()
+    ch = adaptive.update_after_attempt(db)
+    assert ch == {"from": 0, "to": 1, "reason": "rating", "rating": 1272}
+    assert adaptive.target_rating(db, 1272) == (1172, 1372)
+    # inside the band's margin: no change
+    db.add(RatingPoint(rating=1350, rd=60))
+    db.flush()
+    assert adaptive.update_after_attempt(db) is None
+    # far below: back down
+    db.add(RatingPoint(rating=850, rd=60))
+    db.flush()
+    assert adaptive.update_after_attempt(db)["to"] == 0
+
+
+def test_no_puzzle_message_tells_empty_bank_from_exhausted_bank(db):
+    from app.services import trainer
+    from app.services.importer import import_puzzles
+
+    from .conftest import PUZZLE_FIXTURE
+
+    assert "Importe os puzzles do Lichess" in trainer._no_puzzle_message(db)
+    import_puzzles(db, PUZZLE_FIXTURE)
+    assert "já resolveu todos os puzzles" in trainer._no_puzzle_message(db)
+
+
+def test_pressure_loss_is_capped_like_game_acpl(db):
+    """One missed mate (~10000 cp) must not swamp the mean loss shown for a pressure level."""
+    from app.cognitive import pressure
+    from app.models import Attempt
+
+    for loss in (10000, 200):
+        db.add(Attempt(exercise_kind="puzzle", mode="pressure", pressure_level=1, correct=False, cp_loss=loss,
+                       total_ms=5000, time_limit_ms=60000, timed_out=False, themes="", moves_played=[],
+                       move_times_ms=[], hesitation={}, candidates=[], error_detail={}))
+    db.flush()
+    assert pressure.pressure_report(db)["by_level"][1]["mean_cp_loss_when_wrong"] == 600.0

@@ -1,21 +1,28 @@
-AURA (ChessLab 1800) - chess training app
+﻿AURA (ChessLab 1800) - app de treino de xadrez
 
-AURA bundles third-party software:
+O AURA inclui programas de terceiros:
 
-* Stockfish chess engine - GNU General Public License v3.0
-  https://stockfishchess.org  -  source: https://github.com/official-stockfish/Stockfish
+* Stockfish, o motor de xadrez - GNU General Public License v3.0
+  https://stockfishchess.org  -  código-fonte: https://github.com/official-stockfish/Stockfish
 * python-chess - GNU General Public License v3.0
   https://github.com/niklasf/python-chess
-* Qt / PyQt (Linux builds only), React, FastAPI, SQLAlchemy and other
-  libraries under their own open-source licences (MIT, BSD, Apache-2.0, LGPL).
+* Fonte Atkinson Hyperlegible Next - SIL Open Font License 1.1
+  (o texto da licença vai junto, em frontend_dist/licenses)
+* Qt / PyQt (só na versão para Linux), React, FastAPI, SQLAlchemy, Alembic e
+  outras bibliotecas, cada uma com a sua licença de código aberto
+  (MIT, BSD, Apache-2.0, LGPL).
 
-Because AURA includes GPL-3.0 components, AURA itself is distributed under the
-GNU General Public License v3.0. You may use, share and modify it; if you
-share it, the source code must be available. Source code of this AURA build:
+Como inclui componentes GPL-3.0, o próprio AURA é distribuído sob a GNU General
+Public License v3.0. Você pode usar, compartilhar e modificar o programa; se
+compartilhar, o código-fonte precisa estar disponível. Código-fonte desta versão:
 https://github.com/vazwinz/chesslab-1800
 
-Puzzles are downloaded from the Lichess puzzle database (lichess.org), released
-under CC0. AURA is not affiliated with Lichess, Chess.com or the Stockfish team.
+Os puzzles são baixados do banco público de puzzles do Lichess (lichess.org),
+liberado como CC0 (domínio público). O AURA não tem ligação com o Lichess, o
+Chess.com nem a equipe do Stockfish.
 
-This program comes with ABSOLUTELY NO WARRANTY.
-Full GPL-3.0 text: https://www.gnu.org/licenses/gpl-3.0.txt
+Os seus dados (progresso, partidas, configurações e a chave de IA, se você
+configurar uma) ficam só neste computador, em %LOCALAPPDATA%\AURA.
+
+Este programa vem SEM NENHUMA GARANTIA.
+Texto completo da GPL-3.0: https://www.gnu.org/licenses/gpl-3.0.txt

@@ -1,68 +1,100 @@
-import React, { useEffect, useState } from "react";
+import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import "./index.css";
-import { api } from "./lib/api";
-import Analysis from "./pages/Analysis";
-import Cognitive from "./pages/Cognitive";
-import Dashboard from "./pages/Dashboard";
-import Endgames from "./pages/Endgames";
-import Games from "./pages/Games";
-import Openings from "./pages/Openings";
-import Plan from "./pages/Plan";
-import Setup from "./pages/Setup";
+import Shell from "./components/Shell";
+import { Spinner } from "./components/ui";
+import { MetaProvider } from "./lib/meta";
+import { PrefsProvider } from "./lib/prefs";
 import Train from "./pages/Train";
 
-const NAV = [
-  ["/", "Dashboard"], ["/train", "Train"], ["/cognitive", "Cognitive"], ["/analysis", "Analysis"],
-  ["/games", "Games"], ["/openings", "Openings"], ["/endgames", "Endgames"], ["/plan", "Plan"], ["/setup", "Setup"],
-] as const;
+// Train is the screen used most, so it ships in the main bundle; the others load on first visit.
+const Home = lazy(() => import("./pages/Home"));
+const Games = lazy(() => import("./pages/Games"));
+const Analysis = lazy(() => import("./pages/Analysis"));
+const Openings = lazy(() => import("./pages/Openings"));
+const Endgames = lazy(() => import("./pages/Endgames"));
+const Plan = lazy(() => import("./pages/Plan"));
+const Diagnosis = lazy(() => import("./pages/Diagnosis"));
+const Guide = lazy(() => import("./pages/Guide"));
+const Settings = lazy(() => import("./pages/Settings"));
 
-function Shell() {
-  const [health, setHealth] = useState<any>(null);
-  const [puzzles, setPuzzles] = useState<number | null>(null);
-  useEffect(() => {
-    api.get("/api/health").then(setHealth).catch(() => setHealth({ ok: false }));
-    api.get("/api/puzzles/stats").then((s) => setPuzzles(s.count)).catch(() => {});
-  }, []);
+function NotFound() {
   return (
-    <div className="min-h-screen md:flex">
-      <aside className="border-b border-ink-700 bg-ink-900 md:sticky md:top-0 md:h-screen md:w-52 md:shrink-0 md:border-b-0 md:border-r">
-        <div className="flex items-center justify-between px-4 py-3 md:block">
-          <div className="font-semibold tracking-tight">Chess<span className="text-accent">Lab</span> 1800</div>
-          <div className="text-xs text-ink-400 md:mt-1">
-            <span className={health == null ? "text-ink-400" : health?.engine?.ok ? "text-good" : "text-bad"}>●</span>{" "}
-            {health == null ? "checking engine…" : health?.engine?.ok ? health.engine.name : "engine offline"}
-            {puzzles != null && <span className="ml-2 md:ml-0 md:block">{puzzles.toLocaleString()} puzzles</span>}
-          </div>
-        </div>
-        <nav className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:pb-0">
-          {NAV.map(([to, label]) => (
-            <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => `whitespace-nowrap rounded px-3 py-1.5 text-sm ${isActive ? "bg-ink-700 text-accent" : "text-ink-300 hover:bg-ink-800"}`}>{label}</NavLink>
-          ))}
-        </nav>
-      </aside>
-      <main className="min-w-0 flex-1 p-4 md:p-6">
-        {health && !health.ok && <div className="card mb-4 text-bad">Backend not reachable. Start it with <code>uvicorn app.main:app</code> in backend/.</div>}
-        {puzzles === 0 && <div className="card mb-4 border-accent/50 text-sm">No puzzles yet. <NavLink to="/setup" className="text-accent underline">Download the Lichess puzzle database</NavLink> to start training.</div>}
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/train" element={<Train />} />
-          <Route path="/cognitive" element={<Cognitive />} />
-          <Route path="/analysis" element={<Analysis />} />
-          <Route path="/games" element={<Games />} />
-          <Route path="/openings" element={<Openings />} />
-          <Route path="/endgames" element={<Endgames />} />
-          <Route path="/plan" element={<Plan />} />
-          <Route path="/setup" element={<Setup />} />
-        </Routes>
-      </main>
+    <div className="max-w-prose">
+      <h1>Página não encontrada</h1>
+      <p className="mt-2 text-muted">Este endereço não existe no AURA.</p>
+      <Link className="btn-primary mt-4" to="/">Ir para o início</Link>
     </div>
+  );
+}
+
+class Boundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="max-w-prose">
+        <h1>Esta tela travou</h1>
+        <p className="mt-2 text-muted">Algo deu errado ao mostrar esta tela. O seu progresso está salvo.</p>
+        <p className="mt-2 break-words text-sm text-faint">{String(this.state.error.message || this.state.error)}</p>
+        <button className="btn-primary mt-4" onClick={() => window.location.reload()}>Recarregar</button>
+      </div>
+    );
+  }
+}
+
+function App() {
+  return (
+    <PrefsProvider>
+      <MetaProvider>
+        <Shell>
+          <Pages />
+        </Shell>
+      </MetaProvider>
+    </PrefsProvider>
+  );
+}
+
+/** A crash in one screen stays in that screen: going to another one renders it fresh. */
+function Pages() {
+  const loc = useLocation();
+  return (
+    <Boundary key={loc.pathname}>
+      <Suspense fallback={<Spinner label="Carregando…" />}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/treinar" element={<Train />} />
+          <Route path="/partidas" element={<Games />} />
+          <Route path="/partidas/:id" element={<Games />} />
+          <Route path="/analise" element={<Analysis />} />
+          <Route path="/aberturas" element={<Openings />} />
+          <Route path="/finais" element={<Endgames />} />
+          <Route path="/plano" element={<Plan />} />
+          <Route path="/diagnostico" element={<Diagnosis />} />
+          <Route path="/guia" element={<Guide />} />
+          <Route path="/configuracoes" element={<Settings />} />
+          {/* 0.3.0 addresses */}
+          <Route path="/train" element={<Navigate to="/treinar" replace />} />
+          <Route path="/games" element={<Navigate to="/partidas" replace />} />
+          <Route path="/analysis" element={<Navigate to="/analise" replace />} />
+          <Route path="/openings" element={<Navigate to="/aberturas" replace />} />
+          <Route path="/endgames" element={<Navigate to="/finais" replace />} />
+          <Route path="/plan" element={<Navigate to="/plano" replace />} />
+          <Route path="/cognitive" element={<Navigate to="/diagnostico" replace />} />
+          <Route path="/setup" element={<Navigate to="/configuracoes" replace />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
+    </Boundary>
   );
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter><Shell /></BrowserRouter>
+    <BrowserRouter><App /></BrowserRouter>
   </React.StrictMode>,
 );

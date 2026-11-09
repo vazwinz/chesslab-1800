@@ -20,7 +20,7 @@ THEMES: dict[str, tuple[str, str]] = {
                                           "uma ameaça) que melhora a sua situação. Também chamado de zwischenzug."),
     "backRankMate": ("Mate de corredor", "O rei está preso na última fileira pelos próprios peões e leva mate de "
                                          "torre ou dama."),
-    "mateIn1": ("Mate em 1", "Existe xeque-mate em uma jogada."),
+    "mateIn1": ("Mate em 1", "Há um lance que dá xeque-mate."),
     "mateIn2": ("Mate em 2", "Uma sequência forçada de dois lances seus termina em xeque-mate."),
     "mateIn3": ("Mate em 3", "Uma sequência forçada mais longa: calcule todos os xeques e capturas."),
     "mateIn4": ("Mate em 4", "Sequência forçada de quatro lances até o mate."),

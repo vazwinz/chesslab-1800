@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 from ..models import KV, Attempt, Puzzle
 from .stats import wilson
 
+LOSS_CAP_CP = 1000
+
 LEVELS = [
     # level, seconds, extra themes, min solution length, target complexity
     {"level": 1, "seconds": 60, "themes": [], "min_len": 1, "complexity": 0.2},
@@ -90,7 +92,9 @@ def pressure_report(db: Session) -> dict:
             continue
         decided = [a for a in xs if not a.timed_out]
         used = [a.total_ms / a.time_limit_ms for a in decided if a.total_ms and a.time_limit_ms]
-        losses = [a.cp_loss for a in decided if a.correct is False and a.cp_loss is not None]
+        # capped at 1000 cp per move like the games' ACPL: a missed mate is scored as ~10000 cp
+        # and a single one would otherwise swamp the mean
+        losses = [min(a.cp_loss, LOSS_CAP_CP) for a in decided if a.correct is False and a.cp_loss is not None]
         by_level[lv["level"]] = {
             "seconds": lv["seconds"], "n": len(xs),
             "decision_quality": wilson(sum(1 for a in decided if a.correct), len(decided)),

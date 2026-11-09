@@ -68,6 +68,14 @@ def _new_attempt(db: Session, sess: TrainingSession, mode: str, p: Puzzle | None
     return a
 
 
+def _no_puzzle_message(db: Session) -> str:
+    """Empty bank and 'every puzzle near your rating was already served' need different next steps."""
+    if db.execute(select(Puzzle.id).limit(1)).first() is None:
+        return "Não há puzzles. Importe os puzzles do Lichess em Configurações."
+    return ("Você já resolveu todos os puzzles perto do seu rating que estão no banco. "
+            "Importe o banco completo do Lichess em Configurações para ter puzzles novos.")
+
+
 def _adaptive_window(db: Session, offset: int = 0) -> tuple[int, int]:
     r, _ = current_rating(db)
     return adaptive.target_rating(db, r, offset)
@@ -183,7 +191,7 @@ def next_exercise(db: Session, sess: TrainingSession) -> dict:
             if p is not None:
                 pool.append(p)
         if not pool:
-            raise NoExercise("Não há puzzles. Importe os puzzles do Lichess em Configurações.")
+            raise NoExercise(_no_puzzle_message(db))
         p = min(pool, key=lambda q: abs(pressure.complexity(q) - lv["complexity"]))
         a = _new_attempt(db, sess, "pressure", p, time_limit_ms=lv["seconds"] * 1000, pressure_level=lv["level"])
         db.commit()
@@ -204,7 +212,7 @@ def next_exercise(db: Session, sess: TrainingSession) -> dict:
     if p is None and min_len:
         p = puzzles.select_puzzle(db, lo, hi, themes=themes)
     if p is None:
-        raise NoExercise("Não há puzzles. Importe os puzzles do Lichess em Configurações.")
+        raise NoExercise(_no_puzzle_message(db))
     mode = {"blind": "blind", "candidates": "candidates"}.get(kind, "standard")
     a = _new_attempt(db, sess, mode, p, concept=puzzles.primary_concept(p.themes))
     db.commit()

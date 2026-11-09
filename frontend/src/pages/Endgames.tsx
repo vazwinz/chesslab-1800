@@ -1,58 +1,83 @@
-import { Chess } from "chess.js";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Board from "../components/Board";
+import { Empty, ErrorNote, PageHeader } from "../components/ui";
 import { api } from "../lib/api";
+import { tryMove, turnOf } from "../lib/chess";
+import { moveSound, play } from "../lib/sound";
 
 export default function Endgames() {
   const [positions, setPositions] = useState<any[]>([]);
   const [cur, setCur] = useState<any>(null);
   const [fen, setFen] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
+  const [last, setLast] = useState<[string, string] | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
-  const [last, setLast] = useState<[string, string] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => { api.get("/api/endgames").then(setPositions); }, []);
-
-  function pick(p: any) { setCur(p); setFen(p.fen); setMsg(null); setDone(false); setLast(null); }
+  useEffect(() => { api.get("/api/endgames").then(setPositions).catch((e) => setErr(e.message)); }, []);
+  function pick(p: any) { setCur(p); setFen(p.fen); setMsg(null); setDone(false); setLast(null); setErr(null); }
 
   function onMove(uci: string) {
     if (!cur || busy || done) return false;
-    const g = new Chess(fen);
-    try { g.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] }); } catch { return false; }
-    setFen(g.fen());
+    const r = tryMove(fen, uci);
+    if (!r) return false;
+    moveSound(r.move);
+    const before = fen;
+    setFen(r.fen);
+    setLast([uci.slice(0, 2), uci.slice(2, 4)]);
     setBusy(true);
-    api.post("/api/endgames/move", { position_id: cur.id, fen, uci }).then((r) => {
-      if (r.move) { setFen(r.fen); setLast([r.move.slice(0, 2), r.move.slice(2, 4)]); }
-      if (r.finished) { setDone(true); setMsg(r.success ? `Success (${r.result})` : `Failed (${r.result}) — try again`); }
-    }).catch((e) => setMsg(e.message)).finally(() => setBusy(false));
+    api.post("/api/endgames/move", { position_id: cur.id, fen: before, uci }).then((res) => {
+      if (res.move) {
+        window.setTimeout(() => {
+          moveSound(tryMove(r.fen, res.move)?.move);
+          setFen(res.fen);
+          setLast([res.move.slice(0, 2), res.move.slice(2, 4)]);
+        }, 200);
+      }
+      if (res.finished) {
+        setDone(true);
+        play(res.success ? "correct" : "wrong");
+        setMsg({ ok: res.success, text: res.success ? `Objetivo cumprido (${res.result}).` : `Não deu desta vez (${res.result}). Tente de novo.` });
+      }
+    }).catch((e) => { setFen(before); setErr(e.message); }).finally(() => setBusy(false));
     return true;
   }
 
   const modules = [...new Set(positions.map((p) => p.module))];
-  const orient = cur ? (new Chess(cur.fen).turn() === "w" ? "white" : "black") : "white";
+  const side = cur ? turnOf(cur.fen) : "white";
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,640px)]">
-      <div className="min-w-0 space-y-3">
-        <h1>Endgames</h1>
-        <div className="muted text-sm">Play textbook positions against Stockfish until the goal is reached. For more, train <Link className="text-accent" to="/train">endgame puzzles</Link> from the Lichess database.</div>
-        {modules.map((m) => (
-          <div key={m} className="card">
-            <div className="label mb-1">{m}</div>
-            <div className="flex flex-wrap gap-2">{positions.filter((p) => p.module === m).map((p) => (
-              <button key={p.id} className={`btn ${cur?.id === p.id ? "border-accent text-accent" : ""}`} onClick={() => pick(p)}>{p.title} <span className="text-xs text-ink-400">({p.goal})</span></button>
-            ))}</div>
-          </div>
-        ))}
-      </div>
-      <div className="min-w-0 space-y-2">
-        {cur ? (<>
-          <Board fen={fen} orientation={orient} onMove={onMove} disabled={busy || done} lastMove={last} />
-          <div className="card text-sm"><b>{cur.title}</b> — goal: {cur.goal} as {orient}. <span className="text-ink-400">{cur.hint}</span>
-            {msg && <div className={`mt-1 ${msg.startsWith("Success") ? "text-good" : "text-bad"}`}>{msg}</div>}
-            <div className="mt-2 flex gap-2"><button className="btn" onClick={() => pick(cur)}>Restart</button></div></div>
-        </>) : <div className="card muted">Choose a position.</div>}
+    <div>
+      <PageHeader title="Finais" purpose="Posições clássicas de teoria jogadas contra o Stockfish até cumprir o objetivo. Use para fixar técnica (oposição, Lucena, Philidor). Para variedade, há também os puzzles de final em Treinar." />
+      {err && <div className="mb-4"><ErrorNote>{err}</ErrorNote></div>}
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+        <div className="min-w-0 space-y-5">
+          {modules.map((m) => (
+            <div key={m}>
+              <h2 className="mb-2 text-base">{m}</h2>
+              <div className="flex flex-wrap gap-2">{positions.filter((p) => p.module === m).map((p) => (
+                <button key={p.id} className={cur?.id === p.id ? "btn-primary" : "btn"} onClick={() => pick(p)}>
+                  {p.title} <span className="font-normal opacity-75">({p.goal === "win" ? "vencer" : "empatar"})</span>
+                </button>
+              ))}</div>
+            </div>
+          ))}
+          <p className="text-sm text-muted">Quer mais finais? <Link className="link" to="/treinar?modo=endgame">Puzzles de final</Link></p>
+        </div>
+        <div className="min-w-0 space-y-3">
+          {cur ? (
+            <>
+              <Board fen={fen} orientation={side} onMove={onMove} interactive={!busy && !done} lastMove={last} reserve={200} id="endgame" />
+              <div className="max-w-prose">
+                <p><b>{cur.title}</b>: {cur.goal === "win" ? "vencer" : "empatar"} jogando de {side === "white" ? "Brancas" : "Pretas"}.</p>
+                <p className="text-muted">{cur.hint}</p>
+                {msg && <p className={`mt-2 font-bold ${msg.ok ? "text-good" : "text-bad"}`}>{msg.text}</p>}
+                <button className="btn mt-3" onClick={() => pick(cur)}>Recomeçar</button>
+              </div>
+            </>
+          ) : <Empty title="Escolha uma posição">Cada posição tem um objetivo (vencer ou empatar) e uma dica. O Stockfish joga do outro lado.</Empty>}
+        </div>
       </div>
     </div>
   );

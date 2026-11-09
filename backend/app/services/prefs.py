@@ -9,7 +9,7 @@ from ..models import KV
 KEY = "ui_prefs"
 DEFAULTS: dict = {
     "theme": "system",          # system | light | dark
-    "board_theme": "torneio",   # torneio | grafite | madeira | oceano
+    "board_theme": "grafite",   # grafite | torneio | madeira | oceano
     "show_coordinates": True,
     "show_legal_moves": True,
     "animation_ms": 180,

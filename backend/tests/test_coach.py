@@ -235,3 +235,18 @@ def test_ai_off_and_unreachable_never_break_the_explanation(client, tmp_path, mo
     client.put("/api/settings/coach", json={"provider": "ollama", "base_url": "http://127.0.0.1:9/v1", "model": "x"})
     t = client.post("/api/settings/coach/test").json()
     assert t["ok"] is False and "Ollama" in t["message"]
+
+
+def test_mating_move_mentions_only_the_mate():
+    """After mate the game is over: a fork or pin by the mating queen is noise in the explanation."""
+    import chess
+
+    from app.services.tactics import move_facts
+
+    # the queen mates on f7 and also "attacks" the rook on h8 and the knight on f6 -- irrelevant after mate
+    b = chess.Board("r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4")
+    f = move_facts(b, chess.Move.from_uci("h5f7"))
+    assert f.mate and f.tags[0] == "xeque-mate"
+    assert not f.fork and not f.pins and not f.skewers
+    assert not any(t.startswith(("garfo", "crava", "espeto", "ataque descoberto", "ameaça")) for t in f.tags)
+    assert "fork" not in f.motifs and "mate" in f.motifs

@@ -1,20 +1,98 @@
+@import "@fontsource-variable/atkinson-hyperlegible-next/wght.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Tokens: "folha de anotação" — cool paper, ink-blue pen as the only accent,
+   green/red reserved for right/wrong. Values are RGB triplets for Tailwind alpha. */
+:root {
+  color-scheme: light;
+  --paper: 243 245 248;   /* page */
+  --sheet: 255 255 255;   /* panels */
+  --sunk: 236 239 243;    /* inputs, wells */
+  --ink: 22 26 34;        /* text */
+  --muted: 84 92 108;     /* secondary text */
+  --faint: 133 141 156;   /* tertiary text */
+  --rule: 221 226 232;    /* hairlines */
+  --pen: 41 68 184;       /* accent: ballpoint blue */
+  --pen-ink: 255 255 255; /* text on accent */
+  --good: 29 138 78;
+  --bad: 197 58 47;
+  --warn: 168 107 18;
+  --shadow-board: 0 1px 2px rgb(22 26 34 / 0.08), 0 8px 24px rgb(22 26 34 / 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: 20 24 31;
+    --sheet: 27 32 41;
+    --sunk: 34 40 51;
+    --ink: 230 233 239;
+    --muted: 160 168 182;
+    --faint: 118 127 142;
+    --rule: 45 52 64;
+    --pen: 147 168 255;
+    --pen-ink: 16 20 28;
+    --good: 76 195 138;
+    --bad: 255 116 104;
+    --warn: 226 172 69;
+    --shadow-board: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 30px rgb(0 0 0 / 0.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: 20 24 31;
+  --sheet: 27 32 41;
+  --sunk: 34 40 51;
+  --ink: 230 233 239;
+  --muted: 160 168 182;
+  --faint: 118 127 142;
+  --rule: 45 52 64;
+  --pen: 147 168 255;
+  --pen-ink: 16 20 28;
+  --good: 76 195 138;
+  --bad: 255 116 104;
+  --warn: 226 172 69;
+  --shadow-board: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 30px rgb(0 0 0 / 0.35);
+}
+
 @layer base {
-  html { color-scheme: dark; }
-  body { @apply bg-ink-950 text-ink-100 font-sans antialiased; }
-  h1 { @apply text-xl font-semibold tracking-tight; }
-  h2 { @apply text-base font-semibold text-ink-100; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { @apply bg-paper font-sans text-base text-ink antialiased; }
+  h1 { @apply text-2xl font-bold tracking-tight; }
+  h2 { @apply text-lg font-bold; }
+  h3 { @apply text-base font-bold; }
+  :focus-visible { outline: 2px solid rgb(var(--pen)); outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: rgb(var(--pen) / 0.22); }
+  .tnum { font-variant-numeric: tabular-nums; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
 }
+
 @layer components {
-  .card { @apply rounded-lg border border-ink-700 bg-ink-900 p-4; }
-  .btn { @apply inline-flex items-center justify-center gap-2 rounded-md border border-ink-600 bg-ink-800 px-3 py-1.5 text-sm text-ink-100 hover:bg-ink-700 disabled:opacity-40 disabled:cursor-not-allowed; }
-  .btn-primary { @apply btn border-accent/50 bg-accent/15 text-accent hover:bg-accent/25; }
-  .input { @apply w-full rounded-md border border-ink-600 bg-ink-850 px-2.5 py-1.5 text-sm text-ink-100 placeholder:text-ink-400 focus:border-accent/60 focus:outline-none; }
-  .label { @apply text-xs uppercase tracking-wider text-ink-400; }
-  .muted { @apply text-sm text-ink-400; }
-  .stat { @apply text-2xl font-semibold tabular-nums; }
-  .chip { @apply inline-flex items-center rounded border border-ink-600 bg-ink-800 px-1.5 py-0.5 text-xs text-ink-300; }
+  .panel { @apply rounded-xl border border-rule bg-sheet; }
+  .btn { @apply inline-flex min-h-[2.5rem] items-center justify-center gap-2 rounded-lg border border-rule bg-sheet px-4 text-sm font-bold text-ink transition-colors hover:bg-sunk disabled:cursor-not-allowed disabled:opacity-45; }
+  .btn-primary { @apply btn border-pen bg-pen text-pen-ink hover:bg-pen/90; }
+  .btn-quiet { @apply btn border-transparent bg-transparent text-muted hover:bg-sunk hover:text-ink; }
+  .btn-sm { @apply min-h-[2rem] px-3 text-sm; }
+  .input { @apply w-full rounded-lg border border-rule bg-sunk px-3 py-2 text-base text-ink placeholder:text-faint focus:border-pen focus:outline-none; }
+  .label { @apply mb-1 block text-sm font-bold text-muted; }
+  .muted { @apply text-muted; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full border border-rule px-2.5 py-0.5 text-xs font-bold text-muted; }
+  .link { @apply font-bold text-pen underline-offset-2 hover:underline; }
+  .kbd { @apply rounded border border-rule bg-sunk px-1.5 py-0.5 text-xs font-bold text-muted; }
+  .stat { @apply tnum text-2xl font-bold leading-none; }
+  .hair { @apply border-t border-rule; }
+  .move { @apply inline-flex items-center rounded px-1 font-bold text-ink hover:bg-sunk; }
+  .fig { font-family: theme("fontFamily.figurine"); font-weight: 400; }
 }
+
+/* the board's coordinate labels inherit the app font */
+[data-boardid] div[style*="font-size"] { font-family: inherit !important; }
+
+@keyframes badge-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.badge-pop { animation: badge-pop 160ms ease-out; }
+@keyframes ribbon-in { from { transform: scale(0.2); } to { transform: scale(1); } }
+.ribbon-in { animation: ribbon-in 180ms ease-out; }

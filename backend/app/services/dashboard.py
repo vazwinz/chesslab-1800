@@ -102,6 +102,8 @@ def overview(db: Session) -> dict:
     hist = []
     for s in sessions:
         n, ok, ms = agg.get(s.id, (0, 0, 0))
+        if not n:
+            continue  # opened and closed without finishing an exercise
         hist.append({"id": s.id, "kind": s.kind, "theme": s.theme, "started_at": iso(s.started_at), "attempts": n,
                      "correct": ok, "minutes": round(ms / 60000, 1), "break_suggested": s.break_suggested_at is not None})
 

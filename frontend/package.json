@@ -1,7 +1,7 @@
 {
   "name": "chesslab-1800-frontend",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
+    "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
     "chess.js": "1.0.0",
     "react": "18.3.1",
     "react-chessboard": "4.7.2",

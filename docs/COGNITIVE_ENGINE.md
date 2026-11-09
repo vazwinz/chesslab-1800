@@ -45,6 +45,8 @@ The **first matching rule wins** (priority order). Every feature is stored with 
 
 Limits: one mistake can have several causes, and the label can't see your thoughts. The priority order is a design choice. Treat the labels as coaching hints.
 
+In the app (0.4.0) the categories are shown in Portuguese, each with a one-line description, how it is recognised and a question to ask yourself next time (`app/cognitive/error_dna.py`, `INFO`): Problema de relógio, Decisão impulsiva, Ameaça ignorada, Técnica de final, Erro de cálculo, Cegueira tática, Candidatos ruins, Erro posicional. The stored keys did not change.
+
 ## 4. Adaptive interventions (`interventions.py`)
 
 | Intervention | Targets | Exercise design |
@@ -89,7 +91,7 @@ Eight levels, from 60 s down to 12 s per puzzle. Higher levels add defensive, in
 - defending or in check,
 - the Lichess rating deviation (uncertainty about the puzzle's difficulty).
 
-You move up a level with ≥4 of 6 good decisions in time, and down with ≤2. **Decision quality** (correctness and cp lost when wrong, timeouts excluded) is reported separately from **speed** (share of the clock used, timeout rate). Pressure attempts don't change your puzzle rating.
+You move up a level with ≥4 of 6 good decisions in time, and down with ≤2. **Decision quality** (correctness and cp lost when wrong, timeouts excluded; each wrong move's loss is capped at 1000 cp, like the games' ACPL, so one missed mate scored at ~10000 cp cannot swamp the mean) is reported separately from **speed** (share of the clock used, timeout rate). Pressure attempts don't change your puzzle rating.
 
 ## 8. Performance prediction (`prediction.py`) — experimental
 
@@ -116,3 +118,5 @@ Validated learning principles, with references, linked to the features that use 
 | ADAPT | If ≥3 games with ≥100 user moves exist both before and after the assignment start, the outcome is the **game** error rate. Otherwise it is the reassessment rate. "Improved" means the rate fell by ≥2 points or by ≥20% relative, and the Beta posterior is updated. The next cycle starts at DIAGNOSE, using the reassessment as its measurement |
 
 Caveats, also shown in the UI: no control group, small samples, regression to the mean and general improvement all confound "it worked". The posterior is a per-user hint that becomes more useful over many cycles.
+
+Each cycle keeps a log. Since 0.4.0 every entry has a stable `code` (`cycle_started`, `baseline_sufficient`, `no_recurring_error`, `target`, `assigned`, `practice_done`, `outcome_recorded`, `reassessment_reused`) plus its data (`target` stores `category` and `theme`, `assigned` stores `intervention`), and the interface writes the sentence from the code. Entries written by 0.3.0 are translated by migration `0002_v040_ptbr`.

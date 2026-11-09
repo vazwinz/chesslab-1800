@@ -98,11 +98,12 @@ def advance(db: Session, rng: random.Random | None = None) -> LoopCycle:
             pre = {**puzzle_category_rate(base, top["category"]),
                    "games": game_category_rate(db, top["category"])}
             c.diagnosis = {"target": top["category"], "theme": theme, "patterns": pats["patterns"][:8]}
-            _log(c, "diagnose", f"alvo = {top['category']}", code="target", theme=theme)
+            _log(c, "diagnose", f"alvo = {top['category']}", code="target", category=top["category"], theme=theme)
             a = iv.start_assignment(db, top["category"], theme, c.id, pre, rng, target=PRACTICE_N)
             c.assignment_id = a.id
             c.phase = "practice"
-            _log(c, "intervene", f"intervenção escolhida: {a.intervention_key}", code="assigned", draws=a.params.get("draws"))
+            _log(c, "intervene", f"intervenção escolhida: {a.intervention_key}", code="assigned", intervention=a.intervention_key,
+                 draws=a.params.get("draws"))
         elif c.phase == "practice":
             a = db.get(InterventionAssignment, c.assignment_id)
             if a is None:

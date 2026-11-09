@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import KV, Attempt
+from .rating import current_rating
 
 BANDS = [
     {"key": "beginner", "label": "Iniciante", "min": 800, "max": 1000},
@@ -16,6 +17,12 @@ BANDS = [
 ]
 PROMOTE_ACC, DEMOTE_ACC = 0.80, 0.45
 MIN_PROMOTE_N, MIN_DEMOTE_N = 10, 8
+# Everyone starts in the first band. When the puzzle rating is already established (RD at most
+# RATING_JUMP_MAX_RD) and sits more than RATING_JUMP_MARGIN outside the band, the band jumps to the
+# rating's band: the rating already summarises a consistent run, and climbing one band per 10 puzzles
+# would serve far-too-easy puzzles to an intermediate player for dozens of puzzles.
+RATING_JUMP_MARGIN = 100
+RATING_JUMP_MAX_RD = 110
 ADAPTIVE_MODES = ("standard", "blind", "candidates")
 
 
@@ -31,6 +38,13 @@ def _state(db: Session) -> KV:
 def band_for(db: Session) -> dict:
     st = _state(db).value
     return {**BANDS[st["band"]], "index": st["band"]}
+
+
+def band_index_for(rating: float) -> int:
+    for i, b in enumerate(BANDS):
+        if rating < b["max"]:
+            return i
+    return len(BANDS) - 1
 
 
 def update_after_attempt(db: Session) -> dict | None:
@@ -50,6 +64,13 @@ def update_after_attempt(db: Session) -> dict | None:
         change = {"from": st["band"], "to": st["band"] + 1, "accuracy": sum(in_band) / len(in_band), "n": len(in_band)}
     elif len(in_band) >= MIN_DEMOTE_N and sum(in_band) / len(in_band) <= DEMOTE_ACC and st["band"] > 0:
         change = {"from": st["band"], "to": st["band"] - 1, "accuracy": sum(in_band) / len(in_band), "n": len(in_band)}
+    if change is None:
+        r, rd = current_rating(db)
+        target = band_index_for(r)
+        if rd <= RATING_JUMP_MAX_RD and (
+                (target > st["band"] and r > band["max"] + RATING_JUMP_MARGIN)
+                or (target < st["band"] and r < band["min"] - RATING_JUMP_MARGIN)):
+            change = {"from": st["band"], "to": target, "reason": "rating", "rating": round(r)}
     if change:
         last_id = db.execute(select(Attempt.id).order_by(Attempt.id.desc()).limit(1)).scalar() or 0
         st["band"] = change["to"]

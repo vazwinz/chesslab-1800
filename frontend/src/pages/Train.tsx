@@ -1,158 +1,254 @@
-import { Chess } from "chess.js";
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import Board, { Hesitation } from "../components/Board";
-import { api, CATEGORY_LABEL } from "../lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import AnalysisBoard from "../components/AnalysisBoard";
+import Board, { Badge, Hesitation } from "../components/Board";
+import Explain from "../components/Explain";
+import Help from "../components/Help";
+import { Empty, ErrorNote, PageHeader, SanText, Spinner } from "../components/ui";
+import { api } from "../lib/api";
+import { tryMove, walk } from "../lib/chess";
+import { clock, num } from "../lib/format";
+import { LOOP_PHASE, MODE_LABEL, SESSION_KINDS, TRAIN_MODES as MODES, useMeta } from "../lib/meta";
+import { usePrefs } from "../lib/prefs";
+import { moveSound, play } from "../lib/sound";
+import { Exercise, useTrain } from "../lib/trainStore";
 
-type Exercise = {
-  attempt_id: number;
-  mode: string;
-  kind: "puzzle" | "game_position";
-  fen: string;
-  initial_fen: string;
-  opponent_move: string | null;
-  opponent_san?: string;
-  solver_color: "white" | "black";
-  solution_len: number;
-  rating?: number;
-  concept?: string | null;
-  time_limit_ms: number | null;
-  min_think_ms: number | null;
-  blind: boolean;
-  candidates: boolean;
-  retention_probe?: string | null;
-  pressure_level?: number | null;
-  loop_phase?: string;
-  intervention?: { intervention: string; interleaved?: boolean };
-  prompt?: string;
-  complexity?: number;
-};
-
-const KINDS: { kind: string; title: string; text: string }[] = [
-  { kind: "loop", title: "Closed-loop training", text: "Measure → diagnose → intervene → practice → reassess → adapt. Recommended." },
-  { kind: "mixed", title: "Mixed tactics", text: "Adaptive difficulty across all themes." },
-  { kind: "theme", title: "Single theme", text: "Forks, pins, back rank, defence…" },
-  { kind: "blind", title: "Blind calculation", text: "Write the whole line before touching a piece." },
-  { kind: "candidates", title: "Candidate moves", text: "List up to 3 candidates first; scored vs Stockfish." },
-  { kind: "retention", title: "Retention review", text: "Concepts due for spaced review, on new positions." },
-  { kind: "pressure", title: "Pressure", text: "Shrinking clock, defensive and complex positions." },
-  { kind: "endgame", title: "Endgame puzzles", text: "Endgame themes from the puzzle database." },
-  { kind: "own_mistakes", title: "My game mistakes", text: "Positions where you went wrong in your games." },
-];
-const CATS = ["forks", "pins", "skewers", "discovered_attacks", "double_attacks", "deflection", "decoy", "removing_the_defender",
-  "zwischenzug", "back_rank", "checkmate_patterns", "sacrifices", "defensive"];
 
 export default function Train() {
-  const [session, setSession] = useState<{ id: number; kind: string } | null>(null);
+  const st = useTrain();
+  const [params, setParams] = useSearchParams();
+  const [err, setErr] = useState<string | null>(null);
+  const [puzzleCount, setPuzzleCount] = useState<number | null>(null);
+  const [loop, setLoop] = useState<any>(null);
   const [theme, setTheme] = useState("forks");
-  const [ex, setEx] = useState<Exercise | null>(null);
-  const [fen, setFen] = useState<string>("");
-  const [lastMove, setLastMove] = useState<[string, string] | null>(null);
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [now, setNow] = useState(performance.now());
-  const [line, setLine] = useState("");
-  const [cands, setCands] = useState("");
-  const [candsDone, setCandsDone] = useState(false);
-  const [viewFen, setViewFen] = useState<string | null>(null);
-  const servedAt = useRef(0);
-  const hes = useRef<Hesitation>({ selection_changes: 0, cancelled_drags: 0, piece_selections: 0 });
+  const meta = useMeta();
+  const nav = useNavigate();
 
   useEffect(() => {
-    const t = setInterval(() => setNow(performance.now()), 200);
+    api.get("/api/puzzles/stats").then((s) => setPuzzleCount(s.count)).catch(() => {});
+    api.get("/api/cognitive/loop").then(setLoop).catch(() => {});
+  }, []);
+
+  const start = useCallback(async (kind: string, themeKey?: string) => {
+    setErr(null);
+    try {
+      const s = await api.post("/api/sessions", { kind, theme: kind === "theme" ? themeKey : undefined });
+      useTrain.getState().set({ session: { id: s.id, kind, theme: s.theme }, ex: null, result: null, ribbon: [], fen: "" });
+    } catch (e: any) {
+      setErr(e.message);
+    }
+  }, []);
+
+  // "?modo=loop" from another screen: start that mode, or switch to it if another session is open
+  useEffect(() => {
+    const m = params.get("modo");
+    if (!m || puzzleCount == null) return;
+    setParams({}, { replace: true });
+    if (st.session?.kind === m) return;
+    if (!puzzleCount && m !== "own_mistakes") return;
+    void (async () => {
+      if (st.session) {
+        await api.post(`/api/sessions/${st.session.id}/end`).catch(() => {});
+        useTrain.getState().reset();
+      }
+      await start(m);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, puzzleCount]);
+
+  if (st.session) return <Session />;
+
+  const phase = loop?.phase;
+  return (
+    <div>
+      <PageHeader title="Treinar" help="loop"
+        purpose="Escolha um modo. Se não souber qual, use o treino em ciclo: ele mede você, acha o seu erro mais recorrente e treina exatamente isso." />
+      {err && <div className="mb-4"><ErrorNote>{err}</ErrorNote></div>}
+      {puzzleCount === 0 && (
+        <div className="mb-6">
+          <Empty title="Ainda não há puzzles no banco"
+            action={<button className="btn-primary" onClick={() => nav("/configuracoes")}>Baixar puzzles do Lichess</button>}>
+            O download leva alguns minutos. Dá para treinar com os seus erros de partida enquanto isso.
+          </Empty>
+        </div>
+      )}
+      <section className="panel mb-8 flex flex-wrap items-center gap-x-8 gap-y-4 p-5 sm:p-6">
+        <div className="min-w-[16rem] flex-1">
+          <h2 className="text-xl">Treino em ciclo</h2>
+          <p className="mt-1 max-w-prose text-muted">Medir, diagnosticar, praticar o seu erro mais comum e medir de novo. O ciclo guarda o progresso entre os dias.</p>
+          {loop && (
+            <p className="mt-2 text-sm">
+              Fase atual: <b>{LOOP_PHASE[phase] ?? phase}</b>
+              {phase === "measure" && ` (${loop.baseline.attempts ?? 0} de ${loop.baseline.needed} puzzles de medição)`}
+              {phase === "practice" && loop.assignment && ` — ${meta.intervention(loop.assignment.intervention)} para ${meta.dna(loop.assignment.category)}: ${loop.assignment.done} de ${loop.assignment.target}`}
+              {phase === "reassess" && ` (${loop.reassessment.done ?? 0} de ${loop.reassessment.needed})`}
+            </p>
+          )}
+        </div>
+        <button className="btn-primary px-6" onClick={() => start("loop")} disabled={!puzzleCount}>
+          {phase && phase !== "measure" ? "Continuar o ciclo" : "Começar o ciclo"}
+        </button>
+      </section>
+
+      <h2 className="mb-3">Outros modos</h2>
+      <ul className="divide-y divide-rule border-y border-rule">
+        {MODES.map((m) => (
+          <li key={m.kind} className="flex flex-wrap items-center gap-3 py-4">
+            <div className="min-w-[14rem] flex-1">
+              <div className="flex items-center gap-2 font-bold">{SESSION_KINDS[m.kind]}{m.help && <Help id={m.help} />}</div>
+              <p className="max-w-prose text-sm text-muted">{m.when}</p>
+            </div>
+            {m.kind === "theme" && (
+              <select className="input w-auto" value={theme} onChange={(e) => setTheme(e.target.value)} aria-label="Tema">
+                {Object.entries(meta.categories).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            )}
+            <button className="btn" onClick={() => start(m.kind, theme)} disabled={!puzzleCount && m.kind !== "own_mistakes"}>Começar</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ the session */
+function Session() {
+  const st = useTrain();
+  const { session, ex, fen, lastMove, result, servedAt, ribbon } = st;
+  const { prefs } = usePrefs();
+  const meta = useMeta();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [badges, setBadges] = useState<Badge[]>([]);
+  const [line, setLine] = useState("");
+  const [cands, setCands] = useState("");
+  const [view, setView] = useState<"play" | "analysis">("play");
+  const [step, setStep] = useState<number | null>(null); // solution viewer
+  const [explain, setExplain] = useState(false);
+  const [preview, setPreview] = useState<{ fen: string; lastMove: [string, string] | null } | null>(null);
+  const hes = useRef<Hesitation>({ selection_changes: 0, cancelled_drags: 0, piece_selections: 0 });
+  const seq = useRef(0);
+  const set = st.set;
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
 
-  const elapsed = ex && !result ? Math.max(0, now - servedAt.current) : 0;
-  const locked = !!ex?.min_think_ms && elapsed < (ex?.min_think_ms ?? 0) && !result;
-  const remaining = ex?.time_limit_ms ? ex.time_limit_ms - elapsed : null;
-
-  useEffect(() => {
-    if (ex && remaining != null && remaining <= 0 && !result && !busy) giveUp(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remaining]);
-
-  async function start(kind: string) {
-    setError(null);
-    const s = await api.post("/api/sessions", { kind, theme: kind === "theme" ? theme : undefined });
-    setSession({ id: s.id, kind });
-    await next(s.id);
-  }
-
-  async function next(sid = session?.id) {
-    if (!sid) return;
+  const next = useCallback(async () => {
+    if (!session || busy) return;
+    const my = ++seq.current;
     setBusy(true);
-    setResult(null);
-    setError(null);
+    setErr(null);
+    setBadges([]);
     setLine("");
     setCands("");
-    setCandsDone(false);
-    setViewFen(null);
+    setStep(null);
+    setExplain(false);
+    setPreview(null);
+    setView("play");
     try {
-      const e: Exercise = await api.post(`/api/sessions/${sid}/next`);
+      const e: Exercise = await api.post(`/api/sessions/${session.id}/next`);
+      if (my !== seq.current) return;
       hes.current = { selection_changes: 0, cancelled_drags: 0, piece_selections: 0 };
-      setEx(e);
       if (e.opponent_move) {
-        setFen(e.initial_fen);
-        setLastMove(null);
-        setTimeout(() => {
-          setFen(e.fen);
-          setLastMove([e.opponent_move!.slice(0, 2), e.opponent_move!.slice(2, 4)]);
-          servedAt.current = performance.now();
-        }, 450);
+        set({ ex: e, result: null, fen: e.initial_fen, lastMove: null, servedAt: Date.now() + 10_000, candsDone: false });
+        window.setTimeout(() => {
+          if (my !== seq.current) return;
+          const r = tryMove(e.initial_fen, e.opponent_move!);
+          moveSound(r?.move);
+          set({ fen: e.fen, lastMove: [e.opponent_move!.slice(0, 2), e.opponent_move!.slice(2, 4)],
+            servedAt: Date.now() + prefs.animation_ms });
+        }, 280);
       } else {
-        setFen(e.fen);
-        setLastMove(null);
+        play("start");
+        set({ ex: e, result: null, fen: e.fen, lastMove: null, servedAt: Date.now(), candsDone: false });
       }
-      servedAt.current = performance.now() + (e.opponent_move ? 450 : 0);
-    } catch (err: any) {
-      setEx(null);
-      setError(err.message);
+    } catch (e: any) {
+      if (my === seq.current) {
+        set({ ex: null });
+        setErr(e.message);
+      }
+    } finally {
+      if (my === seq.current) setBusy(false);
+    }
+  }, [session, busy, set, prefs.animation_ms]);
+
+  useEffect(() => {
+    if (session && !ex && !err) void next();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id]);
+
+  const elapsed = ex && !result ? Math.max(0, now - servedAt) : 0;
+  const locked = !!ex?.min_think_ms && !result && elapsed < ex.min_think_ms;
+  const remaining = ex?.time_limit_ms && !result ? ex.time_limit_ms - elapsed : null;
+
+  const finish = useCallback((r: any, square?: string) => {
+    set({ result: r, ribbon: [...useTrain.getState().ribbon, r.correct ? "ok" : r.timed_out ? "time" : "bad"] });
+    if (square) setBadges([{ square, kind: r.correct ? "good" : "bad" }]);
+    play(r.correct ? "correct" : "wrong");
+    if (r.correct && prefs.auto_next) window.setTimeout(() => void nextRef.current(), 1100);
+  }, [set, prefs.auto_next]);
+  const nextRef = useRef(next);
+  nextRef.current = next;
+
+  const giveUp = useCallback(async (timedOut = false) => {
+    if (!ex || result || busy) return;
+    setBusy(true);
+    try {
+      const r = await api.post(`/api/attempts/${ex.attempt_id}/give-up`, { timed_out: timedOut,
+        elapsed_ms: Math.round(Date.now() - servedAt), hesitation: hes.current });
+      finish(r);
+    } catch (e: any) {
+      setErr(e.message);
     } finally {
       setBusy(false);
     }
-  }
+  }, [ex, result, busy, servedAt, finish]);
+
+  useEffect(() => {
+    if (remaining != null && remaining <= 0 && !busy) void giveUp(true);
+  }, [remaining, busy, giveUp]);
 
   function onMove(uci: string) {
-    if (!ex || result || busy || locked) return false;
-    if (ex.candidates && !candsDone) return false;
-    const g = new Chess(fen);
-    try {
-      g.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
-    } catch {
-      return false;
-    }
-    setFen(g.fen());
-    setLastMove([uci.slice(0, 2), uci.slice(2, 4)]);
-    send(uci);
+    if (!ex || result || busy || locked || (ex.candidates && !st.candsDone) || ex.blind) return false;
+    const r = tryMove(fen, uci);
+    if (!r) return false;
+    moveSound(r.move);
+    const before = fen;
+    set({ fen: r.fen, lastMove: [uci.slice(0, 2), uci.slice(2, 4)] });
+    void send(uci, before);
     return true;
   }
 
-  async function send(uci: string) {
+  async function send(uci: string, before: string) {
     if (!ex) return;
     setBusy(true);
     try {
       const r = await api.post(`/api/attempts/${ex.attempt_id}/move`, {
-        uci, elapsed_ms: Math.round(performance.now() - servedAt.current), hesitation: hes.current,
-      });
+        uci, elapsed_ms: Math.round(Date.now() - servedAt), hesitation: hes.current });
       if (r.locked) {
-        setError(`Think first — board unlocks in ${(r.remaining_ms / 1000).toFixed(0)}s`);
-        setFen(ex.fen);
+        set({ fen: before });
+        setErr(`Pense primeiro: o tabuleiro libera em ${Math.ceil(r.remaining_ms / 1000)} s.`);
         return;
       }
       if (r.legal === false) {
-        setError("Illegal move");
+        set({ fen: before });
         return;
       }
       if (!r.finished) {
-        setTimeout(() => {
-          setFen(r.fen);
-          setLastMove([r.reply.slice(0, 2), r.reply.slice(2, 4)]);
-        }, 300);
-      } else setResult(r);
+        setBadges([{ square: uci.slice(2, 4), kind: "good" }]);
+        window.setTimeout(() => {
+          const rr = tryMove(useTrain.getState().fen, r.reply);
+          moveSound(rr?.move);
+          set({ fen: r.fen, lastMove: [r.reply.slice(0, 2), r.reply.slice(2, 4)] });
+          setBadges([]);
+        }, 320);
+      } else finish(r, uci.slice(2, 4));
     } catch (e: any) {
-      setError(e.message);
+      set({ fen: before });
+      setErr(e.message);
     } finally {
       setBusy(false);
     }
@@ -163,11 +259,10 @@ export default function Train() {
     setBusy(true);
     try {
       const moves = line.replace(/\d+\.(\.\.)?/g, " ").split(/[\s,]+/).filter(Boolean);
-      const t = Math.round(performance.now() - servedAt.current);
-      const r = await api.post(`/api/attempts/${ex.attempt_id}/line`, { moves, elapsed_ms: t, first_move_ms: t, hesitation: hes.current });
-      setResult(r);
+      const t = Math.round(Date.now() - servedAt);
+      finish(await api.post(`/api/attempts/${ex.attempt_id}/line`, { moves, elapsed_ms: t, first_move_ms: t, hesitation: hes.current }));
     } catch (e: any) {
-      setError(e.message);
+      setErr(e.message);
     } finally {
       setBusy(false);
     }
@@ -177,171 +272,227 @@ export default function Train() {
     if (!ex) return;
     try {
       await api.post(`/api/attempts/${ex.attempt_id}/candidates`, { moves: cands.split(/[\s,]+/).filter(Boolean) });
-      setCandsDone(true);
-      setError(null);
+      set({ candsDone: true });
+      setErr(null);
     } catch (e: any) {
-      setError(e.message);
+      setErr(e.message);
     }
   }
 
-  async function giveUp(timedOut = false) {
-    if (!ex || result) return;
-    setBusy(true);
-    try {
-      const r = await api.post(`/api/attempts/${ex.attempt_id}/give-up`, {
-        timed_out: timedOut, elapsed_ms: Math.round(performance.now() - servedAt.current), hesitation: hes.current,
-      });
-      setResult(r);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
+  async function end() {
+    if (session) await api.post(`/api/sessions/${session.id}/end`).catch(() => {});
+    st.reset();
   }
 
-  function showLine(upto: number) {
-    if (!result?.start_fen) return;
-    const g = new Chess(result.start_fen);
-    for (const m of result.solution_uci.slice(0, upto + 1)) g.move({ from: m.slice(0, 2), to: m.slice(2, 4), promotion: m[4] });
-    setViewFen(g.fen());
-  }
+  // solution viewer
+  const solution = useMemo(() => (result?.start_fen && result.solution_uci ? walk(result.start_fen, result.solution_uci) : []), [result]);
+  const showStep = (i: number | null) => {
+    setPreview(null);
+    if (i == null || !solution.length) return setStep(null);
+    const k = Math.max(-1, Math.min(solution.length - 1, i));
+    if (k >= 0 && (step == null || k > step)) moveSound({ san: solution[k].san, flags: solution[k].flags });
+    setStep(k);
+  };
+  const shown = preview ?? (step != null && result
+    ? step < 0 ? { fen: result.start_fen, lastMove: null } : { fen: solution[step].fen, lastMove: solution[step].lastMove }
+    : null);
 
-  if (!session) {
+  // keyboard: Enter/Espaço próximo · E explicar · A analisar · ← → solução · Esc voltar
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest("input, textarea, select, [role=dialog]")) return;
+      if (view === "analysis") {
+        if (e.key === "Escape") setView("play");
+        return;
+      }
+      if (!result) return;
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void next(); }
+      if (e.key === "e" || e.key === "E") setExplain(true);
+      if (e.key === "a" || e.key === "A") setView("analysis");
+      if (e.key === "ArrowRight") { e.preventDefault(); showStep(step == null ? 0 : step + 1); }
+      if (e.key === "ArrowLeft") { e.preventDefault(); showStep(step == null ? -1 : step - 1); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  if (!session) return null;
+  const sessionTitle = SESSION_KINDS[session.kind] ?? session.kind;
+
+  if (view === "analysis" && result) {
+    const played: string[] = [];
     return (
-      <div className="space-y-4">
-        <h1>Train</h1>
-        {error && <div className="card border-bad/50 text-bad">{error}</div>}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {KINDS.map((k) => (
-            <div key={k.kind} className={`card flex flex-col gap-2 ${k.kind === "loop" ? "border-accent/50" : ""}`}>
-              <div className="font-medium">{k.title}</div>
-              <div className="muted flex-1">{k.text}</div>
-              {k.kind === "theme" && (
-                <select className="input" value={theme} onChange={(e) => setTheme(e.target.value)}>
-                  {CATS.map((c) => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}
-                </select>
-              )}
-              <button className={k.kind === "loop" ? "btn-primary" : "btn"} onClick={() => start(k.kind).catch((e) => setError(e.message))}>
-                Start
-              </button>
-            </div>
-          ))}
-        </div>
+      <div>
+        <AnalysisBoard startFen={result.start_fen ?? ex?.fen ?? fen} initialMoves={played} orientation={ex?.solver_color}
+          header={<>
+            <button className="btn" onClick={() => setView("play")}>Voltar ao puzzle</button>
+            <button className="btn-primary" onClick={() => void next()}>Próximo puzzle</button>
+            <span className="text-sm text-muted">Analisando a posição do puzzle. Mexa as peças à vontade: nada aqui conta no seu rating.</span>
+          </>} />
       </div>
     );
   }
 
-  const boardDisabled = !!result || busy || locked || (ex?.candidates && !candsDone) || !ex;
+  const ratingDelta = result?.rating ? result.rating.after - result.rating.before : 0;
+  const severityTone = result ? (result.correct ? "text-good" : "text-bad") : "";
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,640px)_1fr]">
-      <div className="min-w-0 space-y-2">
-        {ex && (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="chip">{ex.mode}</span>
-            {ex.loop_phase && <span className="chip border-accent/50 text-accent">loop: {ex.loop_phase}</span>}
-            {ex.retention_probe && <span className="chip">retention: {ex.retention_probe}</span>}
-            {ex.pressure_level && <span className="chip">pressure L{ex.pressure_level}</span>}
-            {ex.concept && <span className="chip">{ex.concept}</span>}
-            <span className="ml-auto text-ink-300">{ex.solver_color === "white" ? "White" : "Black"} to move</span>
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,400px)]">
+      <div className="min-w-0">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <h1 className="text-xl">{sessionTitle}</h1>
+          {ex?.loop_phase && <span className="chip border-pen/40 text-pen">ciclo: {LOOP_PHASE[ex.loop_phase] ?? ex.loop_phase}</span>}
+          {ex && ex.mode !== "standard" && <span className="chip">{MODE_LABEL[ex.mode] ?? ex.mode}</span>}
+          {ex?.pressure_level && <span className="chip">nível {ex.pressure_level}</span>}
+          {ex?.concept && <span className="chip">{meta.theme(ex.concept)}</span>}
+          <button className="btn-quiet btn-sm ml-auto" onClick={end}>Encerrar sessão</button>
+        </div>
+        <div className="relative">
+          {fen ? (
+            <Board fen={shown?.fen ?? fen} orientation={ex?.solver_color ?? "white"} onMove={onMove}
+              interactive={!!ex && !result && !busy && !locked && !(ex.candidates && !st.candsDone) && !ex.blind && !shown}
+              lastMove={shown ? shown.lastMove : lastMove} badges={shown ? [] : badges}
+              onHesitation={(h) => (hes.current = h)} reserve={170} id="train" />
+          ) : (
+            <div className="flex aspect-square max-h-[70vh] w-full items-center justify-center rounded-md border border-rule">
+              {err ? <span className="max-w-xs text-center text-muted">{err}</span> : <Spinner label="Carregando o puzzle…" />}
+            </div>
+          )}
+          {locked && (
+            <div className="pointer-events-none absolute inset-x-0 top-3 z-30 mx-auto w-fit max-w-[90%] rounded-full bg-ink/85 px-4 py-2 text-sm font-bold text-paper shadow-lg">
+              Pense primeiro: xeques, capturas e ameaças. Libera em {Math.ceil(((ex?.min_think_ms ?? 0) - elapsed) / 1000)} s
+            </div>
+          )}
+        </div>
+        {ribbon.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1" aria-label={`Resultados da sessão: ${ribbon.filter((r) => r === "ok").length} de ${ribbon.length}`}>
+            {ribbon.slice(-40).map((r, i) => (
+              <span key={i} title={r === "ok" ? "acerto" : r === "time" ? "tempo esgotado" : "erro"}
+                className={`ribbon-in h-3.5 w-3.5 rounded-[3px] ${r === "ok" ? "bg-good" : r === "time" ? "border-2 border-warn" : "border-2 border-bad"}`} />
+            ))}
+            <span className="tnum ml-2 text-sm text-muted">{ribbon.filter((r) => r === "ok").length}/{ribbon.length}</span>
           </div>
         )}
-        {fen ? (
-          <Board fen={viewFen ?? fen} orientation={ex?.solver_color ?? "white"} onMove={onMove} disabled={boardDisabled}
-            lastMove={lastMove} onHesitation={(h) => (hes.current = h)} />
-        ) : (
-          <div className="card muted">{error ?? "Loading…"}</div>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {!result && ex && <button className="btn" onClick={() => giveUp(false)} disabled={busy}>Show solution</button>}
-          {result && <button className="btn-primary" onClick={() => next()} disabled={busy}>Next exercise →</button>}
-          {result && <Link className="btn" to={`/analysis?fen=${encodeURIComponent(result.start_fen ?? ex?.fen ?? "")}`}>Analyse position</Link>}
-          <button className="btn ml-auto" onClick={() => { api.post(`/api/sessions/${session.id}/end`); setSession(null); setEx(null); setFen(""); setResult(null); }}>
-            End session
-          </button>
-        </div>
       </div>
 
-      <div className="min-w-0 space-y-3">
-        {error && <div className="card border-bad/50 text-sm text-bad">{error}</div>}
+      <aside className="min-w-0 space-y-5">
+        {err && <ErrorNote>{err}{!ex && <button className="link ml-2" onClick={() => void next()}>Tentar de novo</button>}</ErrorNote>}
         {ex && !result && (
-          <div className="card space-y-3">
-            {ex.prompt && <div>{ex.prompt}</div>}
-            {ex.opponent_san && <div className="muted">Opponent played <span className="font-mono text-ink-100">{ex.opponent_san}</span>. Find the best continuation ({ex.solution_len} move{ex.solution_len > 1 ? "s" : ""}).</div>}
-            <div className="flex items-baseline gap-4">
-              <div><div className="label">Time</div><div className="stat">{(elapsed / 1000).toFixed(0)}s</div></div>
-              {remaining != null && <div><div className="label">Clock</div><div className={`stat ${remaining < 10000 ? "text-bad" : ""}`}>{Math.max(0, remaining / 1000).toFixed(0)}s</div></div>}
-              {ex.rating && ex.mode !== "assessment" && <div><div className="label">Puzzle</div><div className="stat text-ink-300">{ex.rating}</div></div>}
+          <div className="space-y-4">
+            <div>
+              <p className="text-lg font-bold">{ex.solver_color === "white" ? "Brancas jogam" : "Pretas jogam"}</p>
+              {ex.prompt ? <p className="text-muted">{ex.prompt}</p> : (
+                <p className="text-muted">
+                  {ex.opponent_san && <>O adversário jogou <b className="text-ink"><SanText san={ex.opponent_san} /></b>. </>}
+                  Ache a melhor continuação ({ex.solution_len === 1 ? "1 lance" : `${ex.solution_len} lances seus`}).
+                </p>
+              )}
             </div>
-            {locked && <div className="rounded border border-warn/40 bg-warn/10 p-2 text-sm text-warn">Board locked — scan checks, captures and threats. {(((ex.min_think_ms ?? 0) - elapsed) / 1000).toFixed(0)}s</div>}
-            {ex.candidates && !candsDone && (
-              <div className="min-w-0 space-y-2">
-                <div className="label">Your candidate moves (SAN, up to 3)</div>
-                <input className="input font-mono" placeholder="e.g. Nxf7 Qh5 Rd1" value={cands} onChange={(e) => setCands(e.target.value)} />
-                <button className="btn-primary" onClick={submitCands}>Lock candidates</button>
+            <div className="flex items-end gap-8">
+              <div><div className="text-sm text-muted">Tempo</div><div className="stat">{clock(elapsed)}</div></div>
+              {remaining != null && (
+                <div><div className="text-sm text-muted">Relógio</div><div className={`stat ${remaining < 10000 ? "text-bad" : ""}`}>{clock(remaining)}</div></div>
+              )}
+              {ex.rating && ex.mode !== "assessment" && <div><div className="text-sm text-muted">Puzzle</div><div className="stat text-muted">{ex.rating}</div></div>}
+            </div>
+            {ex.candidates && !st.candsDone && (
+              <div className="space-y-2">
+                <label className="label flex items-center gap-2">Seus lances candidatos (até 3) <Help id="candidates" /></label>
+                <input className="input" placeholder="ex.: Cxf7 Dh5 Td1  (ou Nxf7 Qh5 Rd1)" value={cands} onChange={(e) => setCands(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitCands()} />
+                <button className="btn-primary" onClick={submitCands} disabled={!cands.trim()}>Confirmar candidatos</button>
               </div>
             )}
             {ex.blind && (
-              <div className="min-w-0 space-y-2">
-                <div className="label">Blind calculation — write your moves (SAN), opponent replies are automatic</div>
-                <textarea className="input h-20 font-mono" placeholder="e.g. Qxh7+ Kxh7 Rh3+ … (only your moves are required)" value={line} onChange={(e) => setLine(e.target.value)} />
-                <button className="btn-primary" onClick={submitLine} disabled={!line.trim() || busy}>Submit line</button>
+              <div className="space-y-2">
+                <label className="label flex items-center gap-2">Escreva só os seus lances, em ordem <Help id="blind" /></label>
+                <textarea className="input h-24" placeholder="ex.: Dxh7+ Th3+ …  (letras em inglês também valem: Qxh7+ Rh3+)" value={line}
+                  onChange={(e) => setLine(e.target.value)} />
+                <button className="btn-primary" onClick={submitLine} disabled={!line.trim() || busy}>Enviar a linha</button>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button className="btn" onClick={() => giveUp(false)} disabled={busy}>Ver solução</button>
+            </div>
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-5">
+            <div>
+              <p className={`text-xl font-bold ${severityTone}`}>
+                {result.correct ? "Correto" : result.timed_out ? "O tempo acabou" : "Não foi o melhor lance"}
+              </p>
+              {result.rating && (
+                <p className="tnum text-muted">
+                  Rating de puzzle {num(result.rating.before)} → <b className={ratingDelta >= 0 ? "text-good" : "text-bad"}>{num(result.rating.after)}</b>
+                  {" "}({ratingDelta >= 0 ? "+" : ""}{ratingDelta})
+                </p>
+              )}
+              {result.best_san && <p className="mt-1">Melhor: <b><SanText san={result.best_san} /></b>. Na partida você jogou <SanText san={result.your_game_move} />.</p>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-primary" onClick={() => void next()} disabled={busy}>Próximo puzzle <span className="kbd ml-1 border-pen-ink/30 bg-transparent text-pen-ink/80">Enter</span></button>
+              <button className="btn" onClick={() => setExplain(true)} disabled={explain}>Explicar <span className="kbd">E</span></button>
+              <button className="btn" onClick={() => setView("analysis")}>Analisar posição <span className="kbd">A</span></button>
+            </div>
+
+            {solution.length > 0 && (
+              <div>
+                <div className="mb-1 flex items-center gap-2 text-sm text-muted">Solução <span className="text-faint">(clique ou use ← →)</span></div>
+                <div className="flex flex-wrap gap-1">
+                  <button className={`move border border-rule ${step === -1 ? "bg-pen/15" : ""}`} onClick={() => showStep(-1)}>início</button>
+                  {solution.map((m, i) => (
+                    <button key={i} className={`move border ${step === i ? "border-pen bg-pen/15" : "border-rule"} ${i % 2 ? "text-muted" : ""}`} onClick={() => showStep(i)}>
+                      <SanText san={m.san} />
+                    </button>
+                  ))}
+                  {step != null && <button className="link ml-2 text-sm" onClick={() => showStep(null)}>voltar ao tabuleiro</button>}
+                </div>
+              </div>
+            )}
+
+            {result.error_dna && (
+              <div className="border-l-4 border-bad/60 pl-3">
+                <div className="flex items-center gap-2 font-bold">Error DNA: {meta.dna(result.error_dna.category)} <Help id="error_dna" /></div>
+                <p className="text-sm text-muted">{meta.error_dna[result.error_dna.category]?.short}</p>
+              </div>
+            )}
+            {result.explanation?.length > 0 && !explain && (
+              <ul className="max-w-prose list-disc space-y-1 pl-5 text-sm text-muted">{result.explanation.map((e: string) => <li key={e}>{e}</li>)}</ul>
+            )}
+            {result.break && (
+              <div className="rounded-lg border border-warn/40 bg-warn/10 p-3 text-sm">
+                <p className="font-bold">Hora de uma pausa <Help id="fatigue" /></p>
+                <p>{result.break.recommendation}</p>
+                <p className="mt-1 text-muted">{result.break.reasons.join("; ")}.</p>
+              </div>
+            )}
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              {result.retention && <div><dt className="text-muted">Próxima revisão do tema</dt><dd>{meta.theme(result.retention.concept)}: {reviewIn(result.retention.next_review_in_days)}</dd></div>}
+              {result.intervention && <div><dt className="text-muted">Intervenção</dt><dd className="tnum">{result.intervention.done} de {result.intervention.target}</dd></div>}
+              {result.band_change && <div><dt className="text-muted">Dificuldade</dt><dd>{result.band_change.to > result.band_change.from ? "subiu de faixa" : "desceu de faixa"} <Help id="bands" /></dd></div>}
+              {result.candidates && <div><dt className="text-muted">Candidatos</dt><dd>nota {String(result.candidates.score).replace(".", ",")}</dd></div>}
+              {result.game_url && <div className="col-span-2"><a className="link" href={result.game_url} target="_blank" rel="noreferrer">Ver a partida de origem no Lichess</a></div>}
+            </dl>
+
+            {explain && (
+              <div className="hair pt-4">
+                <Explain autoLoad request={{ attempt_id: result.attempt_id }}
+                  onPreview={(f, lm) => { setStep(null); setPreview({ fen: f, lastMove: lm }); }} />
+                {preview && <button className="link mt-2 text-sm" onClick={() => setPreview(null)}>voltar ao tabuleiro</button>}
               </div>
             )}
           </div>
         )}
-        {result && <Feedback r={result} onStep={showLine} />}
-      </div>
+      </aside>
     </div>
   );
 }
 
-function Feedback({ r, onStep }: { r: any; onStep: (i: number) => void }) {
-  return (
-    <div className="min-w-0 space-y-3">
-      <div className={`card ${r.correct ? "border-good/50" : "border-bad/50"}`}>
-        <div className={`text-lg font-semibold ${r.correct ? "text-good" : "text-bad"}`}>
-          {r.correct ? "Correct" : r.timed_out ? "Time ran out" : "Not the best move"}
-        </div>
-        {r.rating && <div className="muted">Puzzle rating {r.rating.before} → <span className={r.rating.after >= r.rating.before ? "text-good" : "text-bad"}>{r.rating.after}</span></div>}
-        {r.solution_san && (
-          <div className="mt-2">
-            <div className="label mb-1">Solution (click to view)</div>
-            <div className="flex flex-wrap gap-1 font-mono text-sm">
-              {r.solution_san.map((m: string, i: number) => (
-                <button key={i} className={`chip hover:border-accent ${i % 2 ? "opacity-70" : "text-ink-100"}`} onClick={() => onStep(i)}>{m}</button>
-              ))}
-            </div>
-          </div>
-        )}
-        {r.best_san && <div className="mt-2 text-sm">Better: <span className="font-mono">{r.best_san}</span> (you played {r.your_game_move} in the game)</div>}
-        {r.comparison && <div className="muted mt-1">Stockfish: your move {r.comparison.user_san} {(r.comparison.user_cp / 100).toFixed(2)} vs best {r.comparison.best.san} {(r.comparison.best_cp / 100).toFixed(2)}</div>}
-        {r.explanation?.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-300">{r.explanation.map((e: string) => <li key={e}>{e}</li>)}</ul>}
-      </div>
-      {r.error_dna && (
-        <div className="card">
-          <div className="label">Error DNA</div>
-          <div className="font-medium text-bad">{CATEGORY_LABEL[r.error_dna.category]}</div>
-          <div className="muted">{r.error_dna.label}</div>
-          <details className="mt-2 text-xs text-ink-400">
-            <summary className="cursor-pointer">Evidence used</summary>
-            <pre className="mt-1 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(r.error_dna.evidence, null, 1)}</pre>
-          </details>
-        </div>
-      )}
-      {r.break && (
-        <div className="card border-warn/50">
-          <div className="font-medium text-warn">Break suggested</div>
-          <div className="text-sm">{r.break.recommendation}</div>
-          <div className="muted mt-1 text-xs">{r.break.reasons.join("; ")}. {r.break.disclaimer}</div>
-        </div>
-      )}
-      <div className="card grid grid-cols-2 gap-2 text-sm">
-        {r.retention && <div><div className="label">Next review</div>{r.retention.concept}: {r.retention.next_review_in_days} d</div>}
-        {r.intervention && <div><div className="label">Intervention</div>{r.intervention.done}/{r.intervention.target}</div>}
-        {r.loop_phase && <div><div className="label">Loop phase</div>{r.loop_phase}</div>}
-        {r.band_change && <div><div className="label">Difficulty</div>band {r.band_change.from} → {r.band_change.to}</div>}
-        {r.candidates && <div><div className="label">Candidates</div>score {r.candidates.score}</div>}
-      </div>
-    </div>
-  );
+/** Days until the next spaced review, in words. */
+function reviewIn(days: number) {
+  if (days < 0.75) return "ainda hoje";
+  if (days < 1.5) return "amanhã";
+  const d = Math.round(days);
+  return d < 30 ? `em ${d} dias` : `em ${Math.round(d / 7)} semanas`;
 }

@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 VPY=backend/.venv/bin/python
 $VPY -m pip install --upgrade pip
 $VPY -m pip install -r backend/requirements.txt -r desktop/requirements-desktop.txt
-(cd frontend && npm install && npm run build)
+(cd frontend && npm ci && npm run build)
 if [ -n "${STOCKFISH_FROM:-}" ]; then $VPY desktop/fetch_stockfish.py --from "$STOCKFISH_FROM"
 elif [ ! -x desktop/stockfish_bin/stockfish ]; then
   if command -v stockfish >/dev/null; then $VPY desktop/fetch_stockfish.py --from "$(command -v stockfish)"
