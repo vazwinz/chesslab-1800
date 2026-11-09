@@ -39,7 +39,8 @@ class Settings:
     engine_default_depth: int = field(default_factory=lambda: int(os.getenv("ENGINE_DEPTH", "16")))
     engine_max_depth: int = field(default_factory=lambda: int(os.getenv("ENGINE_MAX_DEPTH", "30")))
     engine_max_time: float = field(default_factory=lambda: float(os.getenv("ENGINE_MAX_TIME", "10")))
-    engine_threads: int = field(default_factory=lambda: int(os.getenv("ENGINE_THREADS", "1")))
+    # threads for the analysis-board/coach engine; 0 = automatic (half the CPU cores, at most 4)
+    engine_threads: int = field(default_factory=lambda: int(os.getenv("ENGINE_THREADS", "0")))
     engine_hash_mb: int = field(default_factory=lambda: int(os.getenv("ENGINE_HASH_MB", "64")))
     # depth used when classifying mistakes in imported games (lower = faster import)
     game_analysis_depth: int = field(default_factory=lambda: int(os.getenv("GAME_ANALYSIS_DEPTH", "12")))
@@ -48,14 +49,17 @@ class Settings:
     cors_origins: list[str] = field(
         default_factory=lambda: _list(os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"))
     )
+    # Host headers the server answers to (anything else is refused: protects against DNS rebinding)
+    allowed_hosts: list[str] = field(
+        default_factory=lambda: _list(os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost,::1,testserver"))
+    )
     frontend_dist: Path = field(
         default_factory=lambda: Path(os.getenv("FRONTEND_DIST", str(BACKEND_DIR.parent / "frontend" / "dist")))
     )
-    # Optional AI coach adapter (disabled unless configured)
-    coach_provider: str = field(default_factory=lambda: os.getenv("COACH_PROVIDER", "none"))
-    coach_api_key: str = field(default_factory=lambda: os.getenv("COACH_API_KEY", ""))
-    coach_model: str = field(default_factory=lambda: os.getenv("COACH_MODEL", ""))
-    coach_base_url: str = field(default_factory=lambda: os.getenv("COACH_BASE_URL", ""))
+    # depth Stockfish uses for the "Explicar" coach (rules and optional AI both start from these facts)
+    coach_depth: int = field(default_factory=lambda: int(os.getenv("COACH_DEPTH", "18")))
+    # public GitHub repository whose Releases announce new versions (empty = never check)
+    update_repo: str = field(default_factory=lambda: os.getenv("AURA_UPDATE_REPO", "vazwinz/chesslab-1800"))
 
 
 settings = Settings()

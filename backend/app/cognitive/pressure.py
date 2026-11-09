@@ -99,4 +99,4 @@ def pressure_report(db: Session) -> dict:
             "mean_cp_loss_when_wrong": round(sum(losses) / len(losses), 1) if losses else None,
         }
     return {"current": current_level(db), "levels": LEVELS, "by_level": by_level,
-            "note": "Decision quality excludes timeouts; speed is reported separately."}
+            "note": "A qualidade das decisões não conta os tempos estourados; a velocidade aparece separada."}

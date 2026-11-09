@@ -54,7 +54,9 @@ def build_profile(db: Session, days: int = 60) -> dict:
     defensive = [bool(a.correct) for a in atts if themes_of[a.id] & {"defensiveMove", "equality"}]
     gm = db.execute(select(GameMistake).where(GameMistake.created_at >= since)).scalars().all()
     games = db.execute(select(Game).where(Game.analyzed.is_(True))).scalars().all()
-    user_moves = sum(int(g.metrics.get("user_moves", 0)) for g in games)
+    # same window for numerator and denominator: moves of the games whose mistakes are counted
+    window_games = {m.game_id for m in gm} | {g.id for g in games if g.imported_at >= since}
+    user_moves = sum(int(g.metrics.get("user_moves", 0)) for g in games if g.id in window_games)
     missed_threats = sum(1 for m in gm if m.category == "missed_opponent_threat")
     # 4 candidate generation: candidates mode — was the engine's best move among the listed candidates?
     cand = [a for a in atts if a.mode == "candidates" and a.candidate_score is not None]
@@ -76,40 +78,40 @@ def build_profile(db: Session, days: int = 60) -> dict:
 
     return {
         "window_days": days,
-        "disclaimer": "Observable chess performance only. Not a measure of intelligence, brain activity or any "
-                      "clinical or psychological trait.",
-        "pattern_recognition": {"description": "First-move accuracy on 1–2 move puzzles (board visible)",
+        "disclaimer": "Só desempenho observável no xadrez. Não mede inteligência, atividade cerebral nem qualquer "
+                      "traço clínico ou psicológico.",
+        "pattern_recognition": {"description": "Acerto do primeiro lance em puzzles de 1–2 lances (tabuleiro visível)",
                                 **_rate(first_move_ok), "rating_adjusted_residual": _residual(short)},
         "calculation": {
-            "description": "Success rate by number of moves to find; 'depth' = longest line solved ≥50% (n≥5)",
+            "description": "Acerto por número de lances a encontrar; 'profundidade' = a linha mais longa resolvida em ≥50% das vezes (n≥5)",
             "by_length": {str(k): wilson(sum(v), len(v)) for k, v in sorted(by_len.items())},
             "depth_reached": depth_reached if by_len else None,
             "blind_accuracy": _rate([bool(a.correct) for a in blind]),
         },
         "threat_detection": {
-            "description": "Accuracy on defensive puzzles; missed-threat errors per 100 analysed game moves",
+            "description": "Acerto em puzzles de defesa; ameaças ignoradas a cada 100 lances analisados das suas partidas",
             "defensive_puzzles": _rate(defensive),
             "game_missed_threats_per_100": round(100 * missed_threats / user_moves, 2) if user_moves else None,
             "game_moves_analysed": user_moves,
         },
         "candidate_generation": {
-            "description": "Candidates mode: fraction of positions where Stockfish's best move was in your list",
+            "description": "Modo candidatos: em quantas posições o melhor lance do Stockfish estava na sua lista",
             "n": len(cand), "sufficient": len(cand) >= MIN_N,
             "mean_score": round(sum(a.candidate_score for a in cand) / len(cand), 3) if cand else None,
         },
         "working_memory_load": {
-            "description": "Accuracy with the board visible vs. blind, at equal line length. A large drop means "
-                           "lines that must be held mentally are a bottleneck (a task measure, not a capacity test).",
+            "description": "Acerto com o tabuleiro visível vs. às cegas, com o mesmo tamanho de linha. Uma queda grande "
+                           "mostra que segurar a linha na cabeça é o gargalo (medida da tarefa, não teste de capacidade).",
             "by_length": wm,
         },
         "decision_latency": {
-            "description": "Time to first move (ms)",
+            "description": "Tempo até o primeiro lance (ms)",
             "median_correct_ms": median(first_ms_ok), "median_wrong_ms": median(first_ms_bad),
             "n_correct": len(first_ms_ok), "n_wrong": len(first_ms_bad),
         },
         "time_pressure_consistency": {
-            "description": "Decision quality in pressure mode (excluding timeouts) vs. normal mode, and error rate "
-                           "of game moves made in time trouble",
+            "description": "Qualidade das decisões no modo pressão (sem contar tempo estourado) vs. modo normal, e taxa "
+                           "de erro dos lances de partida feitos com pouco tempo",
             "pressure_quality": _rate([bool(a.correct) for a in p_decided]),
             "pressure_timeouts": {"n": len(pressure), "timeouts": sum(1 for a in pressure if a.timed_out)},
             "normal_quality": _rate([bool(a.correct) for a in standard]),

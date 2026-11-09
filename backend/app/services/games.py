@@ -48,6 +48,39 @@ def _user_color(game: chess.pgn.Game, names: list[str], explicit: str | None) ->
     return None
 
 
+def time_class(tc: str | None) -> str | None:
+    """Chess.com-style class from a PGN TimeControl: estimated duration = base + 40 × increment."""
+    if not tc or tc in ("-", "?"):
+        return None
+    if "/" in tc:  # "1/86400": daily / correspondence
+        return "daily"
+    base, inc = _base_increment(tc)
+    if base is None:
+        return None
+    est = base + 40 * inc
+    if est < 180:
+        return "bullet"
+    if est < 600:
+        return "blitz"
+    return "rapid"
+
+
+def _elo(v: str | None) -> int | None:
+    try:
+        x = int((v or "").strip())
+    except ValueError:
+        return None
+    return x if 100 <= x <= 3500 else None
+
+
+def ratings_from_headers(headers, user_color: str | None) -> tuple[int | None, int | None]:
+    """Your rating and the opponent's, as written in the PGN headers (Chess.com and Lichess export them)."""
+    if user_color not in ("white", "black"):
+        return None, None
+    w, b = _elo(headers.get("WhiteElo")), _elo(headers.get("BlackElo"))
+    return (w, b) if user_color == "white" else (b, w)
+
+
 def import_pgn(db: Session, pgn_text: str, user_color: str | None = None, player_names: list[str] | None = None,
                source: str = "pgn") -> dict:
     names = player_names if player_names is not None else settings.player_names
@@ -57,12 +90,16 @@ def import_pgn(db: Session, pgn_text: str, user_color: str | None = None, player
         try:
             game = chess.pgn.read_game(stream)
         except Exception as exc:  # pragma: no cover - python-chess is lenient
-            errors.append(str(exc))
+            errors.append(f"PGN ilegível: {exc}")
             break
         if game is None:
             break
         if game.errors:
-            errors.extend(str(e) for e in game.errors[:3])
+            errors.extend(f"partida ignorada ({game.headers.get('White', '?')} x {game.headers.get('Black', '?')}): {e}"
+                          for e in game.errors[:2])
+            continue
+        if game.headers.get("Variant", "Standard") not in ("Standard", "", "From Position"):
+            errors.append(f"partida ignorada: variante {game.headers.get('Variant')} não é suportada")
             continue
         if not list(game.mainline_moves()):
             continue
@@ -73,10 +110,13 @@ def import_pgn(db: Session, pgn_text: str, user_color: str | None = None, player
         color = _user_color(game, names, user_color)
         if color is None:
             unknown_color += 1
+        mine, theirs = ratings_from_headers(game.headers, color)
         exporter = chess.pgn.StringExporter(headers=True, variations=False, comments=True)
+        tc = game.headers.get("TimeControl", "")
         g = Game(fingerprint=fp, pgn=game.accept(exporter), white=game.headers.get("White", "?"),
                  black=game.headers.get("Black", "?"), result=game.headers.get("Result", "*"),
-                 played_on=_parse_date(game.headers.get("Date", "")), time_control=game.headers.get("TimeControl", ""),
+                 played_on=_parse_date(game.headers.get("UTCDate") or game.headers.get("Date", "")),
+                 time_control=tc, time_class=time_class(tc), user_elo=mine, opponent_elo=theirs,
                  user_color=color, source=source)
         db.add(g)
         db.flush()
@@ -84,6 +124,13 @@ def import_pgn(db: Session, pgn_text: str, user_color: str | None = None, player
     db.commit()
     return {"imported": len(added), "game_ids": added, "duplicates": skipped, "unknown_user_color": unknown_color,
             "errors": errors[:10]}
+
+
+def set_user_color(game: Game, color: str) -> None:
+    game.user_color = color
+    pg = chess.pgn.read_headers(io.StringIO(game.pgn))
+    if pg is not None:
+        game.user_elo, game.opponent_elo = ratings_from_headers(pg, color)
 
 
 def _base_increment(tc: str) -> tuple[float | None, float]:
@@ -98,15 +145,19 @@ def move_accuracy(win_loss: float) -> float:
     return max(0.0, min(100.0, 103.1668 * math.exp(-0.04354 * win_loss) - 3.1669))
 
 
-def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int | None = None) -> dict:
-    """Evaluate every user move; store inaccuracies/mistakes/blunders with Error DNA labels."""
+def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int | None = None,
+                 should_stop=None) -> dict:
+    """Evaluate every user move; store inaccuracies/mistakes/blunders with Error DNA labels.
+
+    All engine work happens first, without touching the database; the results are then written
+    in one short transaction, so training can keep saving attempts while a game is analysed."""
     if game.user_color is None:
-        raise ValueError("user colour unknown for this game; set CHESSLAB_PLAYER_NAMES or pass user_color")
+        raise ValueError("não sei com qual cor você jogou nesta partida; informe a cor ou o seu nome de usuário")
     depth = depth or settings.game_analysis_depth
     pg = chess.pgn.read_game(io.StringIO(game.pgn))
     user = chess.WHITE if game.user_color == "white" else chess.BLACK
     base, inc = _base_increment(game.time_control)
-    db.query(GameMistake).filter(GameMistake.game_id == game.id).delete()
+    found: list[GameMistake] = []
     board = pg.board()
     last_clock = {chess.WHITE: base, chess.BLACK: base}
     losses, accs, counts = [], [], {"inaccuracy": 0, "mistake": 0, "blunder": 0}
@@ -123,6 +174,8 @@ def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int |
         if clock is not None:
             last_clock[mover] = clock
         if mover == user and not board.is_game_over():
+            if should_stop is not None and should_stop():
+                raise InterruptedError("análise cancelada")
             f = engine_features(engine, board, move, depth)
             wl = f.win_pct_loss or 0.0
             cl = min(f.cp_loss or 0, 1000)
@@ -148,7 +201,7 @@ def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int |
                 if base:
                     f.impulsive_threshold_s = max(1.5, min(5.0, 0.01 * base + inc * 0.3))
                 cat = classify(f, "game")
-                db.add(GameMistake(
+                found.append(GameMistake(
                     game_id=game.id, ply=ply, fen_before=board.fen(), move_uci=move.uci(), move_san=board.san(move),
                     best_uci=f.best_move or move.uci(),
                     best_san=board.san(chess.Move.from_uci(f.best_move)) if f.best_move else board.san(move),
@@ -170,6 +223,8 @@ def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int |
         "result_for_user": _result_for(game.result, game.user_color),
         "depth": depth,
     }
+    db.query(GameMistake).filter(GameMistake.game_id == game.id).delete()
+    db.add_all(found)
     game.metrics = metrics
     game.analyzed = True
     game.analysis_depth = depth

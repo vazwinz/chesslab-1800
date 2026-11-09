@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Attempt, Game, GameMistake, InterventionAssignment, LoopCycle, utcnow
 from . import interventions as iv
+from ..timeutil import iso
 from .error_dna import recurring_patterns
 
 BASELINE_N = 20
@@ -30,12 +31,12 @@ def current_cycle(db: Session) -> LoopCycle:
                       adaptation={}, started_at=utcnow())
         db.add(c)
         db.flush()
-        _log(c, "measure", "cycle started")
+        _log(c, "measure", "ciclo iniciado", code="cycle_started")
     return c
 
 
 def _log(c: LoopCycle, phase: str, msg: str, **data) -> None:
-    c.log = (c.log or []) + [{"ts": utcnow().isoformat(), "phase": phase, "msg": msg, **data}]
+    c.log = (c.log or []) + [{"ts": iso(utcnow()), "phase": phase, "msg": msg, **data}]
     c.updated_at = utcnow()
 
 
@@ -80,7 +81,7 @@ def advance(db: Session, rng: random.Random | None = None) -> LoopCycle:
                           "games": games["games"]}
             if len(base) >= c.baseline["needed"] or games["games"] >= GAME_MIN_GAMES:
                 c.phase = "diagnose"
-                _log(c, "measure", "baseline sufficient", attempts=len(base), games=games["games"])
+                _log(c, "measure", "linha de base suficiente", code="baseline_sufficient", attempts=len(base), games=games["games"])
         elif c.phase == "diagnose":
             pats = recurring_patterns(db)
             targets = iv.weakness_targets(pats)
@@ -89,7 +90,7 @@ def advance(db: Session, rng: random.Random | None = None) -> LoopCycle:
             if not targets:
                 c.phase = "measure"
                 c.baseline = {**c.baseline, "needed": c.baseline.get("needed", BASELINE_N) + BASELINE_N}
-                _log(c, "diagnose", "no recurring error yet — collecting more data", needed=c.baseline["needed"])
+                _log(c, "diagnose", "nenhum erro recorrente ainda — coletando mais dados", code="no_recurring_error", needed=c.baseline["needed"])
                 break
             top = targets[0]
             theme = top["top_themes"][0][0] if top["top_themes"] else None
@@ -97,11 +98,11 @@ def advance(db: Session, rng: random.Random | None = None) -> LoopCycle:
             pre = {**puzzle_category_rate(base, top["category"]),
                    "games": game_category_rate(db, top["category"])}
             c.diagnosis = {"target": top["category"], "theme": theme, "patterns": pats["patterns"][:8]}
-            _log(c, "diagnose", f"target = {top['category']}", theme=theme)
+            _log(c, "diagnose", f"alvo = {top['category']}", code="target", theme=theme)
             a = iv.start_assignment(db, top["category"], theme, c.id, pre, rng, target=PRACTICE_N)
             c.assignment_id = a.id
             c.phase = "practice"
-            _log(c, "intervene", f"assigned {a.intervention_key}", draws=a.params.get("draws"))
+            _log(c, "intervene", f"intervenção escolhida: {a.intervention_key}", code="assigned", draws=a.params.get("draws"))
         elif c.phase == "practice":
             a = db.get(InterventionAssignment, c.assignment_id)
             if a is None:
@@ -111,7 +112,7 @@ def advance(db: Session, rng: random.Random | None = None) -> LoopCycle:
                 c.phase = "reassess"
                 last = db.execute(select(Attempt.id).order_by(Attempt.id.desc()).limit(1)).scalar() or 0
                 c.reassessment = {"start_attempt_id": last, "needed": REASSESS_N}
-                _log(c, "practice", "practice block complete", exercises=a.exercises_done)
+                _log(c, "practice", "bloco de prática concluído", code="practice_done", exercises=a.exercises_done)
         elif c.phase == "reassess":
             start = c.reassessment.get("start_attempt_id", 0)
             atts = list(db.execute(select(Attempt).where(Attempt.id > start, Attempt.mode == "assessment",
@@ -138,14 +139,14 @@ def advance(db: Session, rng: random.Random | None = None) -> LoopCycle:
             result = iv.record_outcome(db, a, post_metric)
             c.adaptation = {"assignment": a.id, "intervention": a.intervention_key, "category": a.target_category,
                             "pre": a.pre_metric, "post": post_metric, **result}
-            _log(c, "adapt", "outcome recorded", **{k: v for k, v in result.items() if k != "posterior"})
+            _log(c, "adapt", "resultado registrado", code="outcome_recorded", **{k: v for k, v in result.items() if k != "posterior"})
             c.phase = "done"
             c.finished_at = utcnow()
             nxt = LoopCycle(phase="diagnose", baseline={"from_previous_cycle": c.id, "needed": BASELINE_N}, log=[],
                             diagnosis={}, reassessment={}, adaptation={}, started_at=utcnow())
             db.add(nxt)
             db.flush()
-            _log(nxt, "measure", "reassessment of previous cycle used as new measurement", previous=c.id)
+            _log(nxt, "measure", "a reavaliação do ciclo anterior virou a nova medição", code="reassessment_reused", previous=c.id)
             c = nxt
         if c.phase == before:
             break
@@ -166,7 +167,7 @@ def loop_status(db: Session) -> dict:
             "description": iv.CATALOG[a.intervention_key].description, "category": a.target_category,
             "theme": a.target_theme, "done": a.exercises_done, "target": a.exercises_target, "status": a.status,
             "offset": a.params.get("offset")},
-        "history": [{"cycle_id": h.id, "adaptation": h.adaptation, "finished_at": h.finished_at.isoformat()}
+        "history": [{"cycle_id": h.id, "adaptation": h.adaptation, "finished_at": iso(h.finished_at)}
                     for h in done],
         "steps": ["measure", "diagnose", "intervene", "practice", "reassess", "adapt"],
     }

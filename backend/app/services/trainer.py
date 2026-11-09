@@ -42,7 +42,7 @@ def _payload(a: Attempt, p: Puzzle | None = None, gm: GameMistake | None = None,
         board = chess.Board(gm.fen_before)
         base.update({"fen": gm.fen_before, "initial_fen": gm.fen_before, "opponent_move": None,
                      "solver_color": "white" if board.turn else "black", "solution_len": 1,
-                     "game_mistake_id": gm.id, "prompt": f"In your game you played {gm.move_san}. Find a better move."})
+                     "game_mistake_id": gm.id, "prompt": f"Na sua partida você jogou {gm.move_san}. Ache um lance melhor."})
     base.update(extra or {})
     return base
 
@@ -77,7 +77,7 @@ def _assessment(db: Session, sess: TrainingSession) -> dict:
     r, _ = current_rating(db)
     p = puzzles.select_puzzle(db, int(r - 150), int(r + 150), exclude_recent_days=3650)
     if p is None:
-        raise NoExercise("No unseen puzzles near your rating. Import more puzzles.")
+        raise NoExercise("Não há puzzles inéditos perto do seu rating. Importe mais puzzles em Configurações.")
     a = _new_attempt(db, sess, "assessment", p)
     return _payload(a, p)
 
@@ -137,7 +137,7 @@ def _intervention_exercise(db: Session, sess: TrainingSession, asg: Intervention
     if p is None:
         p = puzzles.select_puzzle(db, lo, hi)
     if p is None:
-        raise NoExercise("No puzzles available for this intervention. Import more puzzles.")
+        raise NoExercise("Não há puzzles para esta intervenção. Importe mais puzzles em Configurações.")
     a = _new_attempt(db, sess, "intervention", p, assignment_id=asg.id, min_think_ms=spec["min_think_ms"],
                      time_limit_ms=spec["time_limit_s"] * 1000 if spec["time_limit_s"] else None)
     return _payload(a, p, extra={"intervention": spec, "blind": spec["blind"], "candidates": spec["candidates"]})
@@ -161,13 +161,13 @@ def next_exercise(db: Session, sess: TrainingSession) -> dict:
     if kind == "retention":
         ex = _retention_exercise(db, sess)
         if ex is None:
-            raise NoExercise("No concepts are due for review right now.")
+            raise NoExercise("Nenhum tema está na hora de revisar agora. Volte mais tarde ou treine outro modo.")
         db.commit()
         return ex
     if kind == "own_mistakes":
         ex = _own_mistake(db, sess, "standard")
         if ex is None:
-            raise NoExercise("No analysed game mistakes yet. Import and analyse your games first.")
+            raise NoExercise("Ainda não há erros de partidas analisadas. Importe suas partidas em Partidas e espere a análise.")
         db.commit()
         return ex
     if kind == "pressure":
@@ -183,7 +183,7 @@ def next_exercise(db: Session, sess: TrainingSession) -> dict:
             if p is not None:
                 pool.append(p)
         if not pool:
-            raise NoExercise("No puzzles available. Import puzzles first.")
+            raise NoExercise("Não há puzzles. Importe os puzzles do Lichess em Configurações.")
         p = min(pool, key=lambda q: abs(pressure.complexity(q) - lv["complexity"]))
         a = _new_attempt(db, sess, "pressure", p, time_limit_ms=lv["seconds"] * 1000, pressure_level=lv["level"])
         db.commit()
@@ -197,14 +197,14 @@ def next_exercise(db: Session, sess: TrainingSession) -> dict:
     if themes:
         themes = puzzles.themed_any(db, themes)
         if not themes:
-            raise NoExercise("No puzzles with this theme in the local database.")
+            raise NoExercise("Não há puzzles com este tema no banco local.")
     lo, hi = _adaptive_window(db)
     min_len = 2 if kind == "blind" else None
     p = puzzles.select_puzzle(db, lo, hi, themes=themes, min_len=min_len)
     if p is None and min_len:
         p = puzzles.select_puzzle(db, lo, hi, themes=themes)
     if p is None:
-        raise NoExercise("No puzzles available. Import the Lichess puzzle database first.")
+        raise NoExercise("Não há puzzles. Importe os puzzles do Lichess em Configurações.")
     mode = {"blind": "blind", "candidates": "candidates"}.get(kind, "standard")
     a = _new_attempt(db, sess, mode, p, concept=puzzles.primary_concept(p.themes))
     db.commit()
@@ -224,7 +224,7 @@ def _trusted(client_ms: int | None, server_ms: int) -> int:
 
 def play_move(db: Session, a: Attempt, uci: str, elapsed_ms: int | None, hesitation: dict | None) -> dict:
     if a.correct is not None:
-        return {"error": "attempt already finished"}
+        return {"error": "Este exercício já terminou."}
     server_ms = _server_elapsed_ms(a)
     elapsed = _trusted(elapsed_ms, server_ms)
     if a.min_think_ms and not a.moves_played and server_ms + 500 < a.min_think_ms:
@@ -268,7 +268,7 @@ def _game_position_move(db: Session, a: Attempt, uci: str, elapsed: int, hesitat
     a.moves_played = [mv.uci()]
     comparison = None
     try:
-        comparison = get_engine().compare_move(board, mv, depth=ERROR_ANALYSIS_DEPTH)
+        comparison = get_engine("train").compare_move(board, mv, depth=ERROR_ANALYSIS_DEPTH)
         correct = comparison["verdict"] == "good"
         a.cp_loss = comparison["cp_loss"]
     except EngineUnavailable:
@@ -282,7 +282,7 @@ def submit_line(db: Session, a: Attempt, moves: list[str], elapsed_ms: int | Non
                 hesitation: dict | None) -> dict:
     """Blind mode: the whole line is submitted before any piece moves. Accepts UCI or SAN."""
     if a.correct is not None or a.exercise_kind != "puzzle":
-        return {"error": "not a pending puzzle attempt"}
+        return {"error": "Este exercício não está esperando uma linha."}
     p = db.get(Puzzle, a.puzzle_id)
     sol = puzzles.solution_moves(p)
     board = chess.Board(p.fen)
@@ -325,7 +325,7 @@ def submit_line(db: Session, a: Attempt, moves: list[str], elapsed_ms: int | Non
 
 def submit_candidates(db: Session, a: Attempt, moves: list[str]) -> dict:
     if a.moves_played:
-        return {"error": "candidates must be listed before the first move"}
+        return {"error": "Os candidatos precisam ser listados antes do primeiro lance."}
     board = _solver_board(db, a)
     ucis = []
     for raw in moves[:3]:
@@ -335,9 +335,9 @@ def submit_candidates(db: Session, a: Attempt, moves: list[str]) -> dict:
             try:
                 mv = chess.Move.from_uci(raw)
             except ValueError:
-                return {"error": f"illegal or unreadable move: {raw}"}
+                return {"error": f"Lance ilegal ou ilegível: {raw}"}
         if mv not in board.legal_moves:
-            return {"error": f"illegal move: {raw}"}
+            return {"error": f"Lance ilegal: {raw}"}
         ucis.append(mv.uci())
     a.candidates = ucis
     db.commit()
@@ -355,7 +355,7 @@ def _solver_board(db: Session, a: Attempt) -> chess.Board:
 
 def give_up(db: Session, a: Attempt, elapsed_ms: int | None, hesitation: dict | None, timed_out: bool = False) -> dict:
     if a.correct is not None:
-        return {"error": "attempt already finished"}
+        return {"error": "Este exercício já terminou."}
     server_ms = _server_elapsed_ms(a)
     if timed_out and a.time_limit_ms and server_ms + 1500 < a.time_limit_ms:
         timed_out = False  # client claims a timeout that cannot have happened yet
@@ -402,7 +402,7 @@ def _classify_failure(db: Session, a: Attempt, gave_up: bool) -> tuple[str, dict
     wrong = played[2 * fp] if len(played) > 2 * fp else None
     if wrong and not a.timed_out and a.exercise_kind == "puzzle":
         try:
-            ef = engine_features(get_engine(), board, chess.Move.from_uci(wrong), ERROR_ANALYSIS_DEPTH)
+            ef = engine_features(get_engine("train"), board, chess.Move.from_uci(wrong), ERROR_ANALYSIS_DEPTH)
             for k, v in ef.as_dict().items():
                 if getattr(f, k) in (None, [], False) and k not in ("themes",):
                     setattr(f, k, v)
@@ -506,7 +506,7 @@ def _score_candidates(db: Session, a: Attempt) -> dict:
         truth = puzzles.solution_moves(db.get(Puzzle, a.puzzle_id))[0]
     top = []
     try:
-        top = [l.move for l in get_engine().analyse(board, depth=ERROR_ANALYSIS_DEPTH, multipv=3)]
+        top = [l.move for l in get_engine("train").analyse(board, depth=ERROR_ANALYSIS_DEPTH, multipv=3)]
     except EngineUnavailable:
         pass
     best = truth or (top[0] if top else None)

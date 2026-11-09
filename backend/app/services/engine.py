@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import atexit
 import math
+import os
 import threading
 from dataclasses import dataclass
 
@@ -49,8 +50,12 @@ class Line:
 
 
 class StockfishService:
-    def __init__(self, path: str | None = None):
+    def __init__(self, path: str | None = None, threads: int | None = None, hash_mb: int | None = None,
+                 role: str = "analysis"):
         self.path = path or settings.stockfish_path
+        self.threads = threads or 1
+        self.hash_mb = hash_mb or settings.engine_hash_mb
+        self.role = role
         self._engine: chess.engine.SimpleEngine | None = None
         self._lock = threading.Lock()
         self.name: str | None = None
@@ -59,16 +64,17 @@ class StockfishService:
     def _ensure(self) -> chess.engine.SimpleEngine:
         if self._engine is None:
             try:
-                eng = chess.engine.SimpleEngine.popen_uci(self.path, timeout=15)
+                eng = chess.engine.SimpleEngine.popen_uci(self.path, timeout=15, **_popen_kwargs())
             except Exception as exc:  # FileNotFoundError, PermissionError, EngineError...
                 raise EngineUnavailable(
-                    f"Could not start Stockfish at '{self.path}'. Set STOCKFISH_PATH. ({exc})"
+                    f"Não consegui iniciar o Stockfish em '{self.path}'. Confira o caminho nas Configurações "
+                    f"(ou a variável STOCKFISH_PATH). Detalhe: {exc}"
                 ) from exc
             opts = {}
             if "Threads" in eng.options:
-                opts["Threads"] = settings.engine_threads
+                opts["Threads"] = self.threads
             if "Hash" in eng.options:
-                opts["Hash"] = settings.engine_hash_mb
+                opts["Hash"] = self.hash_mb
             if opts:
                 eng.configure(opts)
             self.name = eng.id.get("name", "Stockfish")
@@ -84,13 +90,20 @@ class StockfishService:
                     pass
                 self._engine = None
 
-    def status(self) -> dict:
+    def status(self, wait: bool = True) -> dict:
+        """Engine health. With wait=False it never queues behind a running analysis."""
+        base = {"path": self.path, "role": self.role, "threads": self.threads}
+        if not wait and self._engine is not None:
+            return {**base, "ok": True, "name": self.name, "busy": self._lock.locked()}
+        if not self._lock.acquire(timeout=-1 if wait else 0.05):
+            return {**base, "ok": True, "name": self.name, "busy": True}
         try:
-            with self._lock:
-                self._ensure()
-            return {"ok": True, "name": self.name, "path": self.path}
+            self._ensure()
+            return {**base, "ok": True, "name": self.name, "busy": False}
         except EngineUnavailable as exc:
-            return {"ok": False, "error": str(exc), "path": self.path}
+            return {**base, "ok": False, "error": str(exc)}
+        finally:
+            self._lock.release()
 
     # -- analysis --------------------------------------------------------
     def analyse(self, board: chess.Board, depth: int | None = None, movetime: float | None = None,
@@ -109,9 +122,14 @@ class StockfishService:
             eng = self._ensure()
             try:
                 infos = eng.analyse(board, limit, multipv=multipv)
-            except chess.engine.EngineTerminatedError as exc:
+            except (chess.engine.EngineTerminatedError, chess.engine.EngineError, TimeoutError) as exc:
+                try:
+                    eng.close()
+                except Exception:
+                    pass
                 self._engine = None
-                raise EngineUnavailable(f"Stockfish terminated: {exc}") from exc
+                raise EngineUnavailable(f"O Stockfish parou de responder e será reiniciado no próximo pedido ({exc}).") \
+                    from exc
         if isinstance(infos, dict):
             infos = [infos]
         lines: list[Line] = []
@@ -142,7 +160,7 @@ class StockfishService:
         """Compare the user's move with the engine's best move (mover's POV)."""
         best = self.analyse(board, depth=depth, multipv=3)
         if not best:
-            raise ValueError("position is terminal")
+            raise ValueError("a partida já terminou nesta posição")
         after = board.copy()
         after.push(move)
         user_cp = -self.evaluate(after, depth=depth)
@@ -175,12 +193,48 @@ def classify_loss(win_pct_loss: float) -> str:
     return "good"
 
 
-_service: StockfishService | None = None
+def _popen_kwargs() -> dict:
+    """On Windows, start Stockfish without flashing a console window."""
+    if os.name == "nt":  # pragma: no cover - Windows only
+        import subprocess
+
+        return {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
+    return {}
 
 
-def get_engine() -> StockfishService:
-    global _service
-    if _service is None:
-        _service = StockfishService()
-        atexit.register(_service.close)
-    return _service
+def auto_threads() -> int:
+    return max(1, min(4, (os.cpu_count() or 2) // 2))
+
+
+# One Stockfish process per job, each with its own lock, so a deep analysis on the analysis
+# board never makes puzzle feedback wait, and game analysis in the background never blocks
+# either. Puzzle and game classification use 1 thread: single-threaded search is deterministic,
+# so the same mistake always gets the same label.
+ROLES = ("train", "analysis", "background")
+_services: dict[str, StockfishService] = {}
+_services_lock = threading.Lock()
+
+
+def _role_config(role: str) -> dict:
+    if role == "analysis":
+        return {"threads": settings.engine_threads or auto_threads(), "hash_mb": max(settings.engine_hash_mb, 128)}
+    return {"threads": 1, "hash_mb": settings.engine_hash_mb}
+
+
+def get_engine(role: str = "analysis") -> StockfishService:
+    if role not in ROLES:
+        raise ValueError(f"unknown engine role {role!r}")
+    with _services_lock:
+        svc = _services.get(role)
+        if svc is None:
+            svc = StockfishService(role=role, **_role_config(role))
+            _services[role] = svc
+            atexit.register(svc.close)
+        return svc
+
+
+def close_all() -> None:
+    with _services_lock:
+        svcs = list(_services.values())
+    for s in svcs:
+        s.close()

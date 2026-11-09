@@ -1,6 +1,8 @@
 """Cognitive Engine: Error DNA, retention, interventions, closed loop, attention, pressure, prediction."""
 from __future__ import annotations
 
+import time
+
 import random
 from datetime import date, timedelta
 
@@ -121,6 +123,13 @@ def test_game_import_analysis_and_recurring_patterns(client):
     pgn = PGN_FIXTURE.read_text()
     r = client.post("/api/games/import", json={"pgn": pgn, "player_names": ["TestUser"], "analyze": True}).json()
     assert r["imported"] == 4 and r["unknown_user_color"] == 0
+    assert r["job"]["status"] == "running"  # analysis runs in the background queue
+    for _ in range(600):
+        job = client.get("/api/games/jobs").json()
+        if job["status"] != "running":
+            break
+        time.sleep(0.2)
+    assert job["status"] == "done" and job["done"] == 4 and not job["errors"], job
     dup = client.post("/api/games/import", json={"pgn": pgn, "player_names": ["TestUser"]}).json()
     assert dup["imported"] == 0 and dup["duplicates"] == 4
     games = client.get("/api/games").json()
@@ -136,7 +145,7 @@ def test_game_import_analysis_and_recurring_patterns(client):
     # own-game mistakes become exercises
     sid = client.post("/api/sessions", json={"kind": "own_mistakes"}).json()["id"]
     ex = client.post(f"/api/sessions/{sid}/next").json()
-    assert ex["kind"] == "game_position" and "better move" in ex["prompt"]
+    assert ex["kind"] == "game_position" and "lance melhor" in ex["prompt"]
     res = solve(client, ex, correct=True)
     assert res["correct"] is True and res["comparison"]["verdict"] == "good"
 
@@ -269,13 +278,13 @@ def test_fatigue_detected_only_for_consistent_decline(db):
     tired = [(False, 18000)] * 6 + [(True, 18000)] * 2
     s1 = _session_with(db, good + good + tired)
     t1 = attention.session_trend(db, s1.id)
-    assert t1["suggest_break"] and "medical" in t1["disclaimer"]
+    assert t1["suggest_break"] and "médico" in t1["disclaimer"]
     s2 = _session_with(db, good * 3)
     assert not attention.session_trend(db, s2.id)["suggest_break"]
     s3 = _session_with(db, good * 2 + [(False, 18000)] * 2 + [(True, 10000)] * 6)  # one bad streak recovered
     assert not attention.session_trend(db, s3.id)["suggest_break"]
     s4 = _session_with(db, good)
-    assert attention.session_trend(db, s4.id)["status"].startswith("collecting")
+    assert attention.session_trend(db, s4.id)["status"].startswith("coletando")
 
 
 # ------------------------------------------------------------------ pressure
@@ -321,7 +330,7 @@ def test_prediction_requires_data_and_reports_intervals(db):
     assert acc["slope_per_30d_ci"][0] < acc["slope_per_30d"] < acc["slope_per_30d_ci"][1]
     f = acc["forecasts"][0]
     assert f["pi_low"] < f["value"] < f["pi_high"]
-    assert "not" in prediction.DISCLAIMER.lower()
+    assert "não" in prediction.DISCLAIMER.lower()
 
 
 def test_stats_helpers():
@@ -335,7 +344,7 @@ def test_stats_helpers():
 
 def test_profile_never_claims_iq(client):
     prof = client.get("/api/cognitive/profile").json()
-    assert "Not a measure of intelligence" in prof["disclaimer"]
+    assert "Não mede inteligência" in prof["disclaimer"]
     assert prof["pattern_recognition"]["sufficient"] is False
     pr = client.get("/api/cognitive/principles").json()
     assert {"active_retrieval", "spaced_repetition", "interleaving", "feedback", "deliberate_practice",

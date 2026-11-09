@@ -10,14 +10,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Game, RatingPoint, utcnow
+from ..timeutil import iso, local_date
 from .stats import ols, predict
 
 MIN_GAMES = 10
 MIN_RATING_DAYS = 14
 HORIZONS = [14, 30]
-DISCLAIMER = ("Trend extrapolation from your own past data with 95% prediction intervals. Learning is not linear, "
-              "so treat this as 'where the current trend points', not a forecast or a promised rating. "
-              "Puzzle ratings are not Chess.com ratings.")
+DISCLAIMER = ("Projeção da tendência dos seus próprios dados, com intervalos de previsão de 95%. Aprender não é "
+              "linear: leia como 'para onde a tendência atual aponta', não como promessa de rating. "
+              "Rating de puzzle não é rating do Chess.com.")
 
 
 def _days(d: date | datetime, origin: date) -> float:
@@ -68,7 +69,7 @@ def puzzle_trajectory(db: Session) -> dict:
     pts = db.execute(select(RatingPoint).order_by(RatingPoint.id)).scalars().all()
     by_day: dict[date, float] = {}
     for p in pts:
-        by_day[p.ts.date()] = p.rating  # last rating of each day
+        by_day[local_date(p.ts)] = p.rating  # last rating of each (local) day
     if len(by_day) < MIN_RATING_DAYS:
         return {"status": "insufficient_data", "days": len(by_day), "needed": MIN_RATING_DAYS}
     days = sorted(by_day)
@@ -78,5 +79,5 @@ def puzzle_trajectory(db: Session) -> dict:
 
 
 def prediction_report(db: Session) -> dict:
-    return {"generated_at": utcnow().isoformat(), "disclaimer": DISCLAIMER,
+    return {"generated_at": iso(utcnow()), "disclaimer": DISCLAIMER,
             "games": game_trajectory(db), "puzzle_rating": puzzle_trajectory(db)}

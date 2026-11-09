@@ -158,7 +158,7 @@ def test_api_validation(client):
     assert client.post("/api/attempts/999/move", json={"uci": "e2e4"}).status_code == 404
     sid = client.post("/api/sessions", json={"kind": "mixed"}).json()["id"]
     r = client.post(f"/api/sessions/{sid}/next")
-    assert r.status_code == 409 and "Import" in r.json()["detail"]  # empty DB: no fake puzzles
+    assert r.status_code == 409 and "Importe" in r.json()["detail"]  # empty DB: no fake puzzles
 
 
 def test_dashboard_empty_has_no_fabricated_numbers(client):

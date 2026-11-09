@@ -143,7 +143,10 @@ class Game(Base):
     result: Mapped[str] = mapped_column(String(10), default="*")
     played_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     time_control: Mapped[str] = mapped_column(String(30), default="")
+    time_class: Mapped[str | None] = mapped_column(String(12), nullable=True)  # bullet | blitz | rapid | daily
     user_color: Mapped[str | None] = mapped_column(String(5), nullable=True)  # white | black
+    user_elo: Mapped[int | None] = mapped_column(Integer, nullable=True)  # your rating in the PGN header
+    opponent_elo: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source: Mapped[str] = mapped_column(String(30), default="pgn")
     imported_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     analyzed: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -5,74 +5,74 @@ from __future__ import annotations
 
 PRINCIPLES = {
     "active_retrieval": {
-        "name": "Active retrieval (testing effect)",
+        "name": "Recuperação ativa (efeito de teste)",
         "status": "validated",
-        "summary": "Producing an answer from memory strengthens retention more than re-reading/re-watching.",
+        "summary": "Tirar a resposta da memória fixa mais do que reler ou rever a solução.",
         "references": ["Roediger & Karpicke (2006), Psychological Science 17(3)",
                        "Dunlosky et al. (2013), Psychological Science in the Public Interest 14(1)"],
-        "used_by": ["every puzzle is solved before the answer is shown", "blind calculation mode",
-                    "retention probes"],
+        "used_by": ["todo puzzle é resolvido antes de a resposta aparecer", "modo de cálculo às cegas",
+                    "testes de retenção"],
     },
     "spaced_repetition": {
-        "name": "Spaced repetition / distributed practice",
+        "name": "Repetição espaçada / prática distribuída",
         "status": "validated",
-        "summary": "Reviews spread over increasing intervals beat massed practice for long-term retention.",
+        "summary": "Revisões com intervalos cada vez maiores fixam mais a longo prazo do que treinar tudo de uma vez.",
         "references": ["Cepeda et al. (2006), Psychological Bulletin 132(3)", "Dunlosky et al. (2013)"],
-        "used_by": ["retention engine (SM-2-style intervals per concept)", "intervention blocks mix in due reviews"],
+        "used_by": ["motor de retenção (intervalos no estilo SM-2 por tema)", "os blocos de intervenção misturam revisões vencidas"],
     },
     "interleaving": {
-        "name": "Interleaving",
+        "name": "Intercalação",
         "status": "validated",
-        "summary": "Mixing problem types forces choosing the method, improving discrimination and transfer.",
+        "summary": "Misturar tipos de problema obriga a escolher o método, o que melhora a distinção e a transferência.",
         "references": ["Rohrer & Taylor (2007), Instructional Science 35", "Brunmair & Richter (2019), "
-                       "Psychological Bulletin 145(11) — benefit varies by material"],
-        "used_by": ["every 4th intervention exercise is a different concept", "reassessment uses mixed sets"],
+                       "Psychological Bulletin 145(11) — o benefício varia com o material"],
+        "used_by": ["a cada 4 exercícios de intervenção, 1 é de outro tema", "a reavaliação usa conjuntos misturados"],
     },
     "feedback": {
-        "name": "Immediate, specific feedback",
+        "name": "Feedback imediato e específico",
         "status": "validated",
-        "summary": "Feedback about the task and the process (not the person) improves learning.",
+        "summary": "Feedback sobre a tarefa e o processo (não sobre a pessoa) melhora o aprendizado.",
         "references": ["Hattie & Timperley (2007), Review of Educational Research 77(1)"],
-        "used_by": ["solution + engine line after every attempt", "Error DNA label with the evidence used"],
+        "used_by": ["solução + linha do Stockfish depois de cada exercício", "rótulo do Error DNA com a evidência usada", "botão Explicar"],
     },
     "deliberate_practice": {
-        "name": "Deliberate practice",
+        "name": "Prática deliberada",
         "status": "validated",
-        "summary": "Targeted practice on specific weaknesses with feedback; in chess, serious study predicts "
-                   "skill but explains only part of the variance.",
+        "summary": "Treino focado em fraquezas específicas, com feedback. No xadrez, estudo sério prevê força, "
+                   "mas explica só parte da diferença entre jogadores.",
         "references": ["Ericsson, Krampe & Tesch-Römer (1993), Psychological Review 100(3)",
                        "Charness et al. (2005), Applied Cognitive Psychology 19",
                        "Macnamara, Hambrick & Oswald (2014), Psychological Science 25(8)"],
-        "used_by": ["interventions target measured recurring error categories"],
+        "used_by": ["as intervenções miram as categorias de erro recorrentes que foram medidas"],
     },
     "progressive_challenge": {
-        "name": "Progressive challenge (desirable difficulty)",
+        "name": "Desafio progressivo (dificuldade desejável)",
         "status": "validated",
-        "summary": "Practice should be hard enough to require effort but still mostly successful.",
+        "summary": "O treino deve exigir esforço, mas você ainda deve acertar a maior parte.",
         "references": ["Bjork (1994), in Metacognition: Knowing about Knowing", "Bjork & Bjork (2011)"],
-        "used_by": ["adaptive bands", "intervention difficulty targets ~70–85% success", "pressure levels"],
+        "used_by": ["faixas adaptativas", "a dificuldade das intervenções mira ~70–85% de acerto", "níveis de pressão"],
     },
 }
 
 EXPERIMENTAL = {
-    "error_dna": "Rule-based error categories from engine evals, board features and timing. Heuristic labels; "
-                 "a mistake can have several causes and the label cannot see the player's thoughts.",
-    "intervention_effectiveness": "Per-user Beta/Thompson-sampling estimate of which intervention reduced an error "
-                                  "category. Small samples, no control group, regression to the mean and general "
-                                  "improvement all confound it — treat as a hint, not proof.",
-    "fatigue_detection": "Within-session decline in difficulty-adjusted accuracy plus slower decisions. A training "
-                         "signal, not a medical or psychological assessment.",
-    "pressure_complexity": "Complexity score (forcing moves, line length, defence, rating deviation) is a ChessLab "
-                           "design, not a validated scale.",
-    "performance_prediction": "Linear trend with 95% prediction intervals on your own data. Learning curves are not "
-                              "linear; the forecast is short-range and not an Elo prediction.",
-    "retention_transfer_probe": "Treating success on NEW positions of a concept as 'genuine retention' is a "
-                                "reasonable operationalisation, not an established psychometric measure.",
+    "error_dna": "Categorias de erro por regras, a partir das avaliações do Stockfish, do tabuleiro e do tempo. São "
+                 "rótulos heurísticos: um erro pode ter várias causas e o rótulo não enxerga o que você pensou.",
+    "intervention_effectiveness": "Estimativa (Beta/Thompson sampling, só com os seus dados) de qual intervenção "
+                                  "reduziu cada categoria de erro. Amostras pequenas, sem grupo de controle, regressão à "
+                                  "média e a melhora geral atrapalham — é uma pista, não uma prova.",
+    "fatigue_detection": "Queda, dentro da sessão, do acerto ajustado pela dificuldade, junto com decisões mais "
+                         "lentas. Sinal de treino, não avaliação médica ou psicológica.",
+    "pressure_complexity": "A nota de complexidade (lances forçantes, tamanho da linha, defesa, incerteza do rating) "
+                           "foi desenhada pelo AURA, não é uma escala validada.",
+    "performance_prediction": "Tendência linear com intervalos de previsão de 95% nos seus dados. A curva de "
+                              "aprendizado não é linear; a projeção é de curto prazo e não é uma previsão de Elo.",
+    "retention_transfer_probe": "Considerar 'retenção de verdade' o acerto em posições NOVAS de um tema é uma "
+                                "definição razoável, não uma medida psicométrica estabelecida.",
 }
 
 
 def report() -> dict:
     return {"validated_principles": PRINCIPLES, "experimental_features": EXPERIMENTAL,
-            "note": "‘Validated’ refers to the general learning-science literature. Direct evidence that each "
-                    "principle transfers to chess playing strength is limited; ChessLab measures that for you "
-                    "through game metrics rather than assuming it."}
+            "note": "'Validado' se refere à literatura geral de ciência do aprendizado. A evidência direta de que cada "
+                    "princípio vira força no tabuleiro é limitada; por isso o AURA mede isso nas suas partidas em vez "
+                    "de supor."}

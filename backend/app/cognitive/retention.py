@@ -13,11 +13,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Attempt, ConceptMemory, Puzzle, utcnow
+from ..timeutil import iso
 
 FIRST_INTERVALS = [1.0, 3.0]  # days after the 1st and 2nd successful review
 MAX_INTERVAL = 120.0
 MIN_EASE, MAX_EASE = 1.3, 3.0
-DELAY_BUCKETS = [(0, 1, "<1d"), (1, 3, "1-3d"), (3, 7, "3-7d"), (7, 21, "1-3w"), (21, 10_000, ">3w")]
+DELAY_BUCKETS = [(0, 1, "< 1 dia"), (1, 3, "1–3 dias"), (3, 7, "3–7 dias"), (7, 21, "1–3 semanas"), (21, 10_000, "> 3 semanas")]
 
 
 def quality_from(correct: bool, total_ms: int | None, median_ms: float | None, hesitant: bool) -> int:
@@ -134,11 +135,11 @@ def retention_report(db: Session) -> dict:
         "curve": curve,
         "concepts": [{
             "concept": c.concept, "interval_days": round(c.interval_days, 2), "ease": round(c.ease, 2),
-            "reps": c.reps, "lapses": c.lapses, "due_at": c.due_at.isoformat(), "due": c.due_at <= now and c.learned_at is not None,
+            "reps": c.reps, "lapses": c.lapses, "due_at": iso(c.due_at), "due": c.due_at <= now and c.learned_at is not None,
             "learned": c.learned_at is not None,
             "transfer": {"n": c.transfer_n, "ok": c.transfer_ok}, "recall": {"n": c.recall_n, "ok": c.recall_ok},
         } for c in concepts],
         "due_count": sum(1 for c in concepts if c.learned_at is not None and c.due_at <= now),
-        "note": "Retention = success on NEW puzzles of a concept after a delay. Same-puzzle recall is reported "
-                "separately because it can reflect recognition of the position rather than understanding.",
+        "note": "Retenção = acertar puzzles NOVOS de um tema depois de um tempo sem vê-lo. Acertar o mesmo puzzle de "
+                "novo aparece separado, porque pode ser só lembrar da posição, não entender a ideia.",
     }

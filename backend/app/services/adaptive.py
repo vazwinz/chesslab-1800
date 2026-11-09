@@ -8,11 +8,11 @@ from sqlalchemy.orm import Session
 from ..models import KV, Attempt
 
 BANDS = [
-    {"key": "beginner", "label": "Beginner", "min": 800, "max": 1000},
-    {"key": "intermediate", "label": "Intermediate", "min": 1000, "max": 1300},
-    {"key": "developing", "label": "Developing", "min": 1300, "max": 1500},
-    {"key": "advanced", "label": "Advanced", "min": 1500, "max": 1800},
-    {"key": "expert", "label": "Expert challenge", "min": 1800, "max": 2600},
+    {"key": "beginner", "label": "Iniciante", "min": 800, "max": 1000},
+    {"key": "intermediate", "label": "Intermediário", "min": 1000, "max": 1300},
+    {"key": "developing", "label": "Em evolução", "min": 1300, "max": 1500},
+    {"key": "advanced", "label": "Avançado", "min": 1500, "max": 1800},
+    {"key": "expert", "label": "Desafio forte", "min": 1800, "max": 2600},
 ]
 PROMOTE_ACC, DEMOTE_ACC = 0.80, 0.45
 MIN_PROMOTE_N, MIN_DEMOTE_N = 10, 8

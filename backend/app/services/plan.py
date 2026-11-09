@@ -10,12 +10,12 @@ from ..cognitive.attention import should_offer_light_day
 from ..models import KV, PlanBlock, utcnow
 
 DEFAULT_BLOCKS = [
-    {"key": "tactics", "title": "Tactical patterns", "minutes": 40},
-    {"key": "calculation", "title": "Deep calculation", "minutes": 30},
-    {"key": "endgames", "title": "Endgames", "minutes": 30},
-    {"key": "openings", "title": "Opening preparation", "minutes": 25},
-    {"key": "games", "title": "Serious games", "minutes": 45},
-    {"key": "analysis", "title": "Mistake analysis", "minutes": 10},
+    {"key": "tactics", "title": "Padrões táticos", "minutes": 40},
+    {"key": "calculation", "title": "Cálculo profundo", "minutes": 30},
+    {"key": "endgames", "title": "Finais", "minutes": 30},
+    {"key": "openings", "title": "Preparação de aberturas", "minutes": 25},
+    {"key": "games", "title": "Partidas sérias", "minutes": 45},
+    {"key": "analysis", "title": "Análise dos erros", "minutes": 10},
 ]
 LIGHT_FACTOR = {"tactics": 0.5, "calculation": 0.5, "endgames": 0.5, "openings": 0.4, "games": 0.0, "analysis": 1.0}
 

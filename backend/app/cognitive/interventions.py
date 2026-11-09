@@ -36,38 +36,38 @@ class Intervention:
 
 
 CATALOG: dict[str, Intervention] = {i.key: i for i in [
-    Intervention("pattern_drill", "Pattern drill", ["tactical_blindness"],
-                 "Many short puzzles of the motifs you miss, below your rating, then interleaved.",
+    Intervention("pattern_drill", "Treino de padrões", ["tactical_blindness"],
+                 "Muitos puzzles curtos dos motivos que você erra, abaixo do seu rating, depois misturados.",
                  themes=[], max_len=2, start_offset=-200,
                  principles=["deliberate_practice", "active_retrieval", "interleaving", "feedback"]),
-    Intervention("blind_ladder", "Blind calculation ladder", ["calculation_error"],
-                 "Calculate the whole line before touching a piece; line length grows as you succeed.",
+    Intervention("blind_ladder", "Escada de cálculo às cegas", ["calculation_error"],
+                 "Calcule a linha inteira antes de mexer as peças; a linha fica mais longa quando você acerta.",
                  min_len=2, start_offset=-250, blind=True,
                  principles=["active_retrieval", "progressive_challenge", "feedback"]),
-    Intervention("threat_scan", "Threat scan (defence)", ["missed_opponent_threat"],
-                 "Defensive puzzles. Before moving, ask: what does my opponent threaten?",
+    Intervention("threat_scan", "Varredura de ameaças (defesa)", ["missed_opponent_threat"],
+                 "Puzzles de defesa. Antes de mexer, pergunte: o que o meu adversário ameaça?",
                  themes=["defensiveMove", "equality"], start_offset=-150, min_think_ms=8000,
                  principles=["deliberate_practice", "feedback"]),
-    Intervention("slow_down", "Slow-down protocol", ["impulsive_decision"],
-                 "Board stays locked for a minimum thinking time: checks, captures, threats — then move.",
+    Intervention("slow_down", "Protocolo de desaceleração", ["impulsive_decision"],
+                 "O tabuleiro fica travado por um tempo mínimo: xeques, capturas, ameaças — e só então jogue.",
                  start_offset=-100, min_think_ms=15000,
                  principles=["deliberate_practice", "feedback"]),
-    Intervention("candidate_listing", "Candidate listing", ["poor_candidate_selection", "positional_misunderstanding"],
-                 "Write down 3 candidate moves before playing; scored against Stockfish's top lines.",
+    Intervention("candidate_listing", "Lista de candidatos", ["poor_candidate_selection", "positional_misunderstanding"],
+                 "Escreva 3 lances candidatos antes de jogar; eles são comparados com as melhores linhas do Stockfish.",
                  themes=["quietMove", "defensiveMove", "intermezzo"], start_offset=-150, candidates=True,
                  principles=["deliberate_practice", "feedback"]),
-    Intervention("own_mistakes", "Your own game mistakes", ["positional_misunderstanding", "tactical_blindness",
+    Intervention("own_mistakes", "Seus erros de partida", ["positional_misunderstanding", "tactical_blindness",
                                                             "missed_opponent_threat", "calculation_error",
                                                             "poor_candidate_selection", "endgame_technique_failure"],
-                 "Positions where you went wrong in your real games: find the better move.",
+                 "Posições em que você errou nas suas partidas de verdade: ache o lance melhor.",
                  own_games=True, start_offset=0,
                  principles=["deliberate_practice", "active_retrieval", "feedback"]),
-    Intervention("endgame_technique", "Endgame technique", ["endgame_technique_failure"],
-                 "Endgame puzzles (rook, pawn, minor-piece, queen) at controlled difficulty.",
+    Intervention("endgame_technique", "Técnica de finais", ["endgame_technique_failure"],
+                 "Puzzles de final (torres, peões, peças menores, damas) com dificuldade controlada.",
                  themes=["rookEndgame", "pawnEndgame", "endgame", "knightEndgame", "bishopEndgame", "queenEndgame"],
                  start_offset=-200, principles=["deliberate_practice", "progressive_challenge"]),
-    Intervention("clock_ladder", "Clock ladder", ["time_management_failure"],
-                 "Comfortable puzzles under a shrinking time budget to build fast, safe decisions.",
+    Intervention("clock_ladder", "Escada de relógio", ["time_management_failure"],
+                 "Puzzles confortáveis com um tempo que diminui, para decidir rápido e com segurança.",
                  start_offset=-250, time_limit_s=40,
                  principles=["progressive_challenge", "deliberate_practice"]),
 ]}
@@ -169,7 +169,7 @@ def record_outcome(db: Session, a: InterventionAssignment, post_metric: dict) ->
     st = _stat(db, a.intervention_key, a.target_category)
     if pre is None or post is None or post_metric.get("n", 0) < 10:
         a.improved = None
-        return {"updated": False, "reason": "insufficient reassessment data"}
+        return {"updated": False, "reason": "dados insuficientes na reavaliação"}
     effect = pre - post
     a.improved = effect >= 0.02 or (pre > 0 and post <= 0.8 * pre)
     if a.improved:

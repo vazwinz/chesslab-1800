@@ -36,11 +36,11 @@ def session_trend(db: Session, session_id: int) -> dict:
                        "residual": (int(bool(a.correct)) - a.expected_score) if a.expected_score is not None else None,
                        "total_ms": a.total_ms, "first_move_ms": a.first_move_ms, "hesitation": _hes(a)})
     out = {"session_id": session_id, "n": len(atts), "series": series, "suggest_break": False, "reasons": [],
-           "disclaimer": "Performance-trend signal only; not a medical or psychological diagnosis."}
+           "disclaimer": "É só um sinal da tendência do seu desempenho, não um diagnóstico médico ou psicológico."}
     minutes = ((sess.last_activity_at - sess.started_at).total_seconds() / 60) if sess else 0
     out["minutes"] = round(minutes, 1)
     if len(atts) < MIN_ATTEMPTS:
-        out["status"] = f"collecting data ({len(atts)}/{MIN_ATTEMPTS} attempts)"
+        out["status"] = f"coletando dados ({len(atts)}/{MIN_ATTEMPTS} exercícios)"
         return out
     early = series[: max(WINDOW, len(series) // 3)]
     late = series[-WINDOW:]
@@ -62,13 +62,13 @@ def session_trend(db: Session, session_id: int) -> dict:
                 and l_res <= LATE_RESIDUAL_MAX and l1 is not None and l2 is not None and l1 < e_res and l2 < e_res)
     slower = bool(e_ms and l_ms and l_ms >= LATENCY_RATIO * e_ms) or bool(e_h is not None and l_h is not None and l_h >= e_h + 1)
     if declined:
-        out["reasons"].append(f"accuracy relative to difficulty fell from {e_res:+.2f} to {l_res:+.2f}")
+        out["reasons"].append(f"o acerto em relação à dificuldade caiu de {e_res:+.2f} para {l_res:+.2f}")
     if slower:
-        out["reasons"].append("decisions became slower / more hesitant than at the start of the session")
+        out["reasons"].append("as decisões ficaram mais lentas / mais hesitantes do que no começo da sessão")
     if declined and (slower or minutes >= LONG_SESSION_MIN):
         out["suggest_break"] = True
-        out["recommendation"] = "Performance has dropped consistently. Take a 10–15 minute break away from the board."
-    out["status"] = "decline detected" if out["suggest_break"] else "stable"
+        out["recommendation"] = "Seu desempenho caiu de forma consistente. Faça uma pausa de 10–15 minutos longe do tabuleiro."
+    out["status"] = "queda detectada" if out["suggest_break"] else "estável"
     return out
 
 

@@ -10,11 +10,14 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..db import get_db
+from ..timeutil import iso
 from ..models import Attempt, EngineCache, Game, Puzzle, Repertoire, RepertoireLine, TrainingSession, utcnow
-from ..services import coach, dashboard, endgames, openings, plan, puzzles, trainer
+from ..services import dashboard, endgames, openings, plan, prefs, puzzles, trainer
 from ..services.engine import EngineUnavailable, get_engine
-from ..services.games import analyze_game, import_pgn
+from ..services import game_jobs
+from ..services.games import analyze_game, import_pgn, set_user_color
 
 router = APIRouter(prefix="/api")
 
@@ -23,9 +26,9 @@ def _board(fen: str) -> chess.Board:
     try:
         b = chess.Board(fen)
     except ValueError as exc:
-        raise HTTPException(422, f"invalid FEN: {exc}")
+        raise HTTPException(422, f"FEN inválido: {exc}")
     if not b.is_valid():
-        raise HTTPException(422, f"illegal position: {b.status()!r}")
+        raise HTTPException(422, "Posição ilegal (confira reis, peões na primeira/última fileira e de quem é a vez).")
     return b
 
 
@@ -46,7 +49,9 @@ class AnalyseIn(BaseModel):
 
 @router.get("/health")
 def health():
-    return {"ok": True, "engine": get_engine().status()}
+    from ..version import __version__
+
+    return {"ok": True, "version": __version__, "engine": get_engine().status(wait=False)}
 
 
 @router.post("/engine/analyse")
@@ -81,9 +86,9 @@ def compare(body: CompareIn):
         try:
             mv = board.parse_san(body.move)
         except ValueError:
-            raise HTTPException(422, "unreadable move")
+            raise HTTPException(422, "Lance ilegível.")
     if mv not in board.legal_moves:
-        raise HTTPException(422, "illegal move")
+        raise HTTPException(422, "Lance ilegal nesta posição.")
     return _engine_call(lambda: get_engine().compare_move(board, mv, depth=body.depth))
 
 
@@ -109,7 +114,7 @@ def parse_pgn(body: PgnIn):
 
     g = chess.pgn.read_game(io.StringIO(body.pgn))
     if g is None or g.errors:
-        raise HTTPException(422, "could not parse PGN" + (f": {g.errors[0]}" if g and g.errors else ""))
+        raise HTTPException(422, "Não consegui ler o PGN" + (f": {g.errors[0]}" if g and g.errors else "."))
     b = g.board()
     start, ucis, sans = b.fen(), [], []
     for mv in g.mainline_moves():
@@ -129,7 +134,7 @@ def puzzle_stats(db: Session = Depends(get_db)):
             "categories": puzzles.TACTICAL_CATEGORIES,
             "imports": [{"id": j.id, "source": j.source, "status": j.status, "inserted": j.inserted,
                          "updated": j.updated, "invalid": j.invalid, "rows_read": j.rows_read,
-                         "finished_at": j.finished_at.isoformat() if j.finished_at else None} for j in jobs]}
+                         "finished_at": iso(j.finished_at)} for j in jobs]}
 
 
 @router.get("/puzzles/random")
@@ -137,7 +142,7 @@ def random_puzzle(min_rating: int = 800, max_rating: int = 3000, theme: str | No
                   db: Session = Depends(get_db)):
     p = puzzles.select_puzzle(db, min_rating, max_rating, themes=[theme] if theme else None)
     if p is None:
-        raise HTTPException(404, "no puzzle matches")
+        raise HTTPException(404, "Nenhum puzzle com esses filtros.")
     return {"id": p.id, "rating": p.rating, "themes": p.themes.split(), **puzzles.puzzle_start(p)}
 
 
@@ -169,7 +174,7 @@ def end_session(sid: int, db: Session = Depends(get_db)):
 def next_exercise(sid: int, db: Session = Depends(get_db)):
     s = db.get(TrainingSession, sid)
     if s is None:
-        raise HTTPException(404, "session not found")
+        raise HTTPException(404, "Sessão de treino não encontrada.")
     try:
         return trainer.next_exercise(db, s)
     except trainer.NoExercise as exc:
@@ -192,7 +197,7 @@ class MoveIn(BaseModel):
 def _attempt(db: Session, aid: int) -> Attempt:
     a = db.get(Attempt, aid)
     if a is None:
-        raise HTTPException(404, "attempt not found")
+        raise HTTPException(404, "Exercício não encontrado.")
     return a
 
 
@@ -251,39 +256,83 @@ def attempt_give_up(aid: int, body: GiveUpIn, db: Session = Depends(get_db)):
 
 # ---------------------------------------------------------------- games
 class GamesIn(BaseModel):
-    pgn: str = Field(..., min_length=10, max_length=5_000_000)
+    pgn: str = Field(..., min_length=10, max_length=20_000_000)
     user_color: Literal["white", "black"] | None = None
     player_names: list[str] | None = None
     analyze: bool = False
+    wait: bool = False  # analyse inside the request (scripts/tests); the app uses the background queue
 
 
 @router.post("/games/import")
 def games_import(body: GamesIn, db: Session = Depends(get_db)):
-    res = import_pgn(db, body.pgn, body.user_color, body.player_names)
+    names = [n.strip() for n in body.player_names or [] if n.strip()]
+    if names:
+        prefs.update_prefs(db, {"player_names": ", ".join(names)})  # remembered for next time
+    else:
+        names = prefs.player_names(db) or settings.player_names
+    res = import_pgn(db, body.pgn, body.user_color, names)
     if body.analyze:
-        res["analysis"] = {}
-        for gid in res["game_ids"]:
-            g = db.get(Game, gid)
-            if g.user_color:
-                res["analysis"][gid] = _engine_call(lambda g=g: analyze_game(db, g, get_engine()))
-        from ..cognitive import loop
+        ids = [gid for gid in res["game_ids"] if db.get(Game, gid).user_color]
+        if body.wait:
+            from ..cognitive import loop
 
-        loop.advance(db)
-        db.commit()
+            for gid in ids:
+                _engine_call(lambda gid=gid: analyze_game(db, db.get(Game, gid), get_engine("background")))
+            loop.advance(db)
+            db.commit()
+        elif ids:
+            res["job"] = game_jobs.enqueue_analysis(ids)
     return res
+
+
+class ChessComIn(BaseModel):
+    username: str = Field(..., min_length=2, max_length=40)
+    months: int = Field(3, ge=1, le=24)
+    analyze: bool = True
+
+
+@router.post("/games/import/chesscom")
+def games_import_chesscom(body: ChessComIn):
+    from ..services.chesscom import USERNAME_RE
+
+    if not USERNAME_RE.match(body.username.strip()):
+        raise HTTPException(422, "Nome de usuário do Chess.com inválido.")
+    return game_jobs.enqueue_chesscom(body.username.strip(), body.months, body.analyze)
+
+
+@router.get("/games/jobs")
+def games_job_state():
+    return game_jobs.state()
+
+
+@router.post("/games/jobs/cancel")
+def games_job_cancel():
+    return game_jobs.cancel()
+
+
+@router.post("/games/analyze-pending")
+def games_analyze_pending(db: Session = Depends(get_db)):
+    ids = game_jobs.pending_ids(db)
+    if not ids:
+        return {**game_jobs.state(), "message": "Nenhuma partida pendente de análise."}
+    return game_jobs.enqueue_analysis(ids)
 
 
 @router.post("/games/{gid}/analyze")
 def games_analyze(gid: int, depth: int | None = Query(None, ge=6, le=30),
-                  user_color: Literal["white", "black"] | None = None, db: Session = Depends(get_db)):
+                  user_color: Literal["white", "black"] | None = None, wait: bool = False,
+                  db: Session = Depends(get_db)):
     g = db.get(Game, gid)
     if g is None:
-        raise HTTPException(404)
+        raise HTTPException(404, "Partida não encontrada.")
     if user_color:
-        g.user_color = user_color
+        set_user_color(g, user_color)
+        db.commit()
     if not g.user_color:
-        raise HTTPException(422, "set user_color (or CHESSLAB_PLAYER_NAMES) first")
-    m = _engine_call(lambda: analyze_game(db, g, get_engine(), depth))
+        raise HTTPException(422, "Diga com qual cor você jogou (ou salve seu nome de usuário em Partidas).")
+    if not wait:
+        return game_jobs.enqueue_analysis([gid], depth)
+    m = _engine_call(lambda: analyze_game(db, g, get_engine("background"), depth))
     from ..cognitive import loop
 
     loop.advance(db)
@@ -293,10 +342,13 @@ def games_analyze(gid: int, depth: int | None = Query(None, ge=6, le=30),
 
 @router.get("/games")
 def games_list(db: Session = Depends(get_db)):
-    gs = db.execute(select(Game).order_by(Game.id.desc()).limit(200)).scalars().all()
+    gs = db.execute(select(Game).order_by(Game.played_on.desc().nulls_last(), Game.id.desc()).limit(500)).scalars().all()
+    job = game_jobs.state()
     return [{"id": g.id, "white": g.white, "black": g.black, "result": g.result, "date": g.played_on.isoformat()
-             if g.played_on else None, "time_control": g.time_control, "user_color": g.user_color,
-             "analyzed": g.analyzed, "metrics": g.metrics} for g in gs]
+             if g.played_on else None, "time_control": g.time_control, "time_class": g.time_class,
+             "user_color": g.user_color, "user_elo": g.user_elo, "opponent_elo": g.opponent_elo, "source": g.source,
+             "analyzed": g.analyzed, "analyzing": job.get("status") == "running" and job.get("game_id") == g.id,
+             "metrics": g.metrics} for g in gs]
 
 
 @router.get("/games/{gid}")
@@ -307,11 +359,24 @@ def games_detail(gid: int, db: Session = Depends(get_db)):
     if g is None:
         raise HTTPException(404)
     ms = db.execute(select(GameMistake).where(GameMistake.game_id == gid).order_by(GameMistake.ply)).scalars().all()
+    import io
+
+    pg = chess.pgn.read_game(io.StringIO(g.pgn))
+    b = pg.board() if pg else chess.Board()
+    start, ucis, sans = b.fen(), [], []
+    for mv in (pg.mainline_moves() if pg else []):
+        sans.append(b.san(mv))
+        ucis.append(mv.uci())
+        b.push(mv)
     return {"id": g.id, "pgn": g.pgn, "white": g.white, "black": g.black, "result": g.result,
-            "user_color": g.user_color, "metrics": g.metrics,
-            "mistakes": [{"ply": m.ply, "fen": m.fen_before, "move": m.move_san, "best": m.best_san,
-                          "cp_loss": m.cp_loss, "severity": m.severity, "category": m.category, "phase": m.phase,
-                          "clock_s": m.clock_s, "think_s": m.think_s, "evidence": m.detail} for m in ms]}
+            "date": g.played_on.isoformat() if g.played_on else None, "time_control": g.time_control,
+            "user_color": g.user_color, "metrics": g.metrics, "analyzed": g.analyzed,
+            "start_fen": start, "moves_uci": ucis, "moves_san": sans,
+            "mistakes": [{"id": m.id, "ply": m.ply, "fen": m.fen_before, "move": m.move_san, "move_uci": m.move_uci,
+                          "best": m.best_san, "best_uci": m.best_uci, "cp_loss": m.cp_loss,
+                          "win_pct_loss": m.win_pct_loss, "severity": m.severity, "category": m.category,
+                          "phase": m.phase, "clock_s": m.clock_s, "think_s": m.think_s, "evidence": m.detail}
+                         for m in ms]}
 
 
 # ---------------------------------------------------------------- daily plan
@@ -493,14 +558,14 @@ def endgame_move(body: EndgameMoveIn):
     try:
         mv = chess.Move.from_uci(body.uci)
     except ValueError:
-        raise HTTPException(422, "unreadable move")
+        raise HTTPException(422, "Lance ilegível.")
     if b.turn != user_color or mv not in b.legal_moves:
-        raise HTTPException(422, "illegal move")
+        raise HTTPException(422, "Lance ilegal nesta posição.")
     b.push(mv)
     done = endgames.outcome(b.fen(), user_color, pos["goal"])
     if done:
         return {"fen": b.fen(), "finished": True, **done}
-    reply = _engine_call(lambda: endgames.engine_reply(get_engine(), b.fen(), body.depth))
+    reply = _engine_call(lambda: endgames.engine_reply(get_engine("train"), b.fen(), body.depth))
     done = endgames.outcome(reply["fen"], user_color, pos["goal"])
     return {**reply, "finished": bool(done), **(done or {})}
 
@@ -508,10 +573,9 @@ def endgame_move(body: EndgameMoveIn):
 # ---------------------------------------------------------------- setup (desktop app)
 @router.get("/setup")
 def setup_status(db: Session = Depends(get_db)):
-    from ..config import settings
     from ..services import import_jobs
 
-    return {"engine": get_engine().status(), "puzzles": puzzles.puzzle_count(db), "data_dir": settings.data_dir,
+    return {"engine": get_engine().status(wait=False), "puzzles": puzzles.puzzle_count(db), "data_dir": settings.data_dir,
             "database_url": settings.database_url, "import": import_jobs.state(),
             "lichess_url": import_jobs.LICHESS_PUZZLE_URL}
 
@@ -537,21 +601,10 @@ def setup_import(body: ImportIn):
         raise HTTPException(422, str(exc))
 
 
-# ---------------------------------------------------------------- dashboard & coach
+# ---------------------------------------------------------------- dashboard
 @router.get("/dashboard")
 def dash(db: Session = Depends(get_db)):
     return dashboard.overview(db)
-
-
-class CoachIn(BaseModel):
-    fen: str
-    move: str | None = None
-
-
-@router.post("/coach/explain")
-def coach_explain(body: CoachIn):
-    _board(body.fen)
-    return _engine_call(lambda: coach.explain(get_engine(), body.fen, body.move))
 
 
 @router.get("/puzzles/{pid}")

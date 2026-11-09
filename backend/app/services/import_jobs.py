@@ -68,23 +68,34 @@ def _run(path: Path | None, url: str | None, kwargs: dict) -> None:
         _set(status="done", phase="done", rows_read=job.rows_read, inserted=job.inserted, updated=job.updated,
              invalid=job.invalid, seconds=round(time.time() - t0))
     except Exception as exc:  # surfaced to the UI
-        _set(status="failed", error=str(exc)[:500])
+        _set(status="failed", error=_friendly(exc)[:500])
+
+
+def _friendly(exc: Exception) -> str:
+    name = type(exc).__name__
+    if name in ("ConnectError", "ConnectTimeout", "ReadTimeout", "RemoteProtocolError"):
+        return "Sem conexão com database.lichess.org. Confira a internet e tente de novo (o download recomeça do zero)."
+    if name == "HTTPStatusError":
+        return f"O Lichess respondeu com erro ({exc}). Tente mais tarde."
+    if isinstance(exc, OSError) and getattr(exc, "errno", None) == 28:
+        return "Disco cheio: libere espaço (o arquivo tem algumas centenas de MB) e tente de novo."
+    return f"Falha na importação: {exc}"
 
 
 def start(path: str | None = None, download: bool = False, url: str = LICHESS_PUZZLE_URL,
           limit: int | None = None, min_rating: int | None = None, max_rating: int | None = None) -> dict:
     with _lock:
         if _state.get("status") == "running":
-            raise RuntimeError("an import is already running")
+            raise RuntimeError("Já existe uma importação em andamento.")
     p = None
     if not download:
         if not path:
-            raise ValueError("give a file path or choose download")
+            raise ValueError("Informe o caminho do arquivo ou escolha baixar do Lichess.")
         p = Path(path).expanduser()
         if not p.exists():
-            raise ValueError(f"file not found: {p}")
+            raise ValueError(f"Arquivo não encontrado: {p}")
         if "TEST_ONLY" in p.name:
-            raise ValueError("refusing to import a TEST_ONLY fixture")
+            raise ValueError("Recusado: arquivos TEST_ONLY são dados de teste, não puzzles do Lichess.")
     with _lock:
         _state.clear()
         _state.update({"status": "running", "phase": "starting", "started": time.time()})

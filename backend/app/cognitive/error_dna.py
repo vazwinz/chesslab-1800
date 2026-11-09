@@ -19,16 +19,54 @@ from ..models import Attempt, GameMistake, utcnow
 from ..models import Game
 from ..services.engine import StockfishService, win_pct
 
-CATEGORIES = {
-    "tactical_blindness": "Tactical blindness — a forcing tactic was available and not seen",
-    "calculation_error": "Calculation error — the idea was started/found but the line was miscalculated",
-    "missed_opponent_threat": "Missed opponent threat — the opponent's threat was not addressed",
-    "impulsive_decision": "Impulsive decision — the move was played much faster than the position required",
-    "poor_candidate_selection": "Poor candidate selection — good options existed but were not considered",
-    "positional_misunderstanding": "Positional misunderstanding — a quiet, non-tactical evaluation error",
-    "time_management_failure": "Time-management failure — error made in time trouble or on timeout",
-    "endgame_technique_failure": "Endgame technique failure — error in a simplified endgame position",
+INFO = {
+    "tactical_blindness": {
+        "name": "Cegueira tática",
+        "short": "havia uma tática forçada e ela não foi vista",
+        "how": "No puzzle, o primeiro lance já foi errado. Na partida, o melhor lance era forçante (xeque, captura) "
+               "e bem melhor que o segundo.",
+        "tip": "Da próxima vez, se pergunte: quais são todos os xeques, capturas e ameaças, das duas cores?"},
+    "calculation_error": {
+        "name": "Erro de cálculo",
+        "short": "a ideia começou certa, mas a sequência foi mal calculada",
+        "how": "No puzzle, você acertou o começo e errou um lance depois, ou errou a linha no modo às cegas. Na "
+               "partida, o seu lance era forçante e a refutação também.",
+        "tip": "Da próxima vez, se pergunte: no fim da minha linha, qual é a melhor resposta do adversário?"},
+    "missed_opponent_threat": {
+        "name": "Ameaça ignorada",
+        "short": "o adversário tinha uma ameaça e ela não foi respondida",
+        "how": "Puzzle de defesa, ou a refutação do seu lance era justamente a ameaça que o adversário já tinha "
+               "(o AURA testa isso deixando o adversário jogar duas vezes).",
+        "tip": "Da próxima vez, se pergunte: o que o último lance do adversário ameaça?"},
+    "impulsive_decision": {
+        "name": "Decisão impulsiva",
+        "short": "o lance saiu muito mais rápido do que a posição pedia",
+        "how": "Você pensou bem menos do que o seu normal em puzzles parecidos (ou do que o relógio permitia, "
+               "na partida) e havia mais de um lance legal.",
+        "tip": "Da próxima vez, se pergunte: eu comparei pelo menos dois lances antes de jogar?"},
+    "poor_candidate_selection": {
+        "name": "Candidatos ruins",
+        "short": "havia boas opções que não foram consideradas",
+        "how": "No modo de candidatos, a solução não estava na sua lista. Na partida, os três melhores lances eram "
+               "parecidos e você jogou fora deles.",
+        "tip": "Da próxima vez, se pergunte: quais são os meus três candidatos antes de escolher?"},
+    "positional_misunderstanding": {
+        "name": "Erro posicional",
+        "short": "erro de avaliação numa posição calma, sem tática",
+        "how": "Nenhuma das regras acima bateu: foi um lance quieto que piorou a posição.",
+        "tip": "Da próxima vez, se pergunte: qual é a minha pior peça e como ela melhora?"},
+    "time_management_failure": {
+        "name": "Problema de relógio",
+        "short": "erro cometido com pouco tempo ou por estourar o tempo",
+        "how": "O tempo acabou, ou o lance foi feito com o relógio abaixo de 10 s (ou 5% do tempo inicial).",
+        "tip": "Da próxima vez, se pergunte: quanto tempo eu posso gastar neste lance?"},
+    "endgame_technique_failure": {
+        "name": "Técnica de final",
+        "short": "erro numa posição de final simplificada",
+        "how": "Pouco material sobrando (ou puzzle com tema de final) quando o erro aconteceu.",
+        "tip": "Da próxima vez, se pergunte: o meu rei está ativo e para onde vão os peões?"},
 }
+CATEGORIES = {k: f"{v['name']} — {v['short']}" for k, v in INFO.items()}
 PRIORITY = ["time_management_failure", "impulsive_decision", "missed_opponent_threat", "endgame_technique_failure",
             "calculation_error", "tactical_blindness", "poor_candidate_selection", "positional_misunderstanding"]
 PIECE_VALUE = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5, chess.QUEEN: 9, chess.KING: 0}

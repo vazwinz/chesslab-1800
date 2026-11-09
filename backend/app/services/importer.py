@@ -97,7 +97,7 @@ def import_puzzles(db: Session, path: Path, batch_size: int = 5000, limit: int |
     try:
         header = next(rows)
         if [h.strip().lstrip("﻿") for h in header[:8]] != EXPECTED_HEADER[:8]:
-            raise ValueError(f"Unexpected header {header!r}; expected {EXPECTED_HEADER!r}")
+            raise ValueError("Este arquivo não é o banco de puzzles do Lichess (o cabeçalho do CSV é diferente do esperado).")
         batch: list[dict] = []
         for row in rows:
             job.rows_read += 1
