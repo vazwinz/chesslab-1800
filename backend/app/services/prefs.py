@@ -29,12 +29,24 @@ DEFAULTS: dict = {
     "arrows_played": True,      # the move you played, at each of your mistakes
     "arrows_opponent": True,    # the opponent's threat before your move and the reply that punishes it
     "arrows_others": True,      # Stockfish's 2nd and 3rd moves (analysis board)
+    # "Jogar" (against the computer)
+    "play_alarm": "forte",      # mistakes and blunders: forte (red screen until you click) | leve (a flash) | desligado
+    "play_color": "white",      # white | black | random
+    "play_clock": "none",       # none | 5+3 | 10+5 | 15+10 | 30+0
+    "play_hints": 3,            # hints per game, 0-5 (a hint makes the game unrated)
+    "play_takebacks": True,     # allow taking a move back (makes the game unrated)
+    "play_auto_level": True,    # the level follows your rating against the computer
+    "play_level": 1000,         # the level when it does not
+    "play_show_eval": False,    # evaluation bar during the game
 }
 CHOICES = {
     "theme": {"system", "light", "dark"},
     "board_theme": {"torneio", "grafite", "madeira", "oceano"},
     "notation": {"figurine", "letters"},
     "goal_time_class": {"auto", "bullet", "blitz", "rapid", "daily"},
+    "play_alarm": {"forte", "leve", "desligado"},
+    "play_color": {"white", "black", "random"},
+    "play_clock": {"none", "5+3", "10+5", "15+10", "30+0"},
 }
 
 
@@ -66,6 +78,10 @@ def update_prefs(db: Session, changes: dict) -> dict:
             v = max(400, min(3200, int(v)))
         if k == "chesscom_username":
             v = str(v).strip()[:40]
+        if k == "play_hints":
+            v = max(0, min(5, int(v)))
+        if k == "play_level":
+            v = max(400, min(2500, int(v)))
         cur[k] = v
     kv = db.get(KV, KEY)
     if kv is None:

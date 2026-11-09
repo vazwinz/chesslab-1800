@@ -223,7 +223,7 @@ def auto_threads() -> int:
 # board never makes puzzle feedback wait, and game analysis in the background never blocks
 # either. Puzzle and game classification use 1 thread: single-threaded search is deterministic,
 # so the same mistake always gets the same label.
-ROLES = ("train", "analysis", "background")
+ROLES = ("train", "analysis", "background", "play")
 _services: dict[str, StockfishService] = {}
 _services_lock = threading.Lock()
 

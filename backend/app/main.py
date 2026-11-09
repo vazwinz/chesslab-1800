@@ -13,7 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .config import settings
 from .db import init_db
 from .i18n import STATUS_TEXT, validation_message
-from .routers import cognitive, core, extras
+from .routers import cognitive, core, extras, play
 from .security import LocalOnlyMiddleware
 from .version import __version__
 
@@ -36,6 +36,7 @@ app.add_middleware(LocalOnlyMiddleware, allowed_hosts=settings.allowed_hosts, al
 app.include_router(core.router)
 app.include_router(cognitive.router)
 app.include_router(extras.router)
+app.include_router(play.router)
 
 
 # ---------------------------------------------------------------- errors in Portuguese
