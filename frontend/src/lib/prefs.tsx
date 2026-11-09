@@ -27,7 +27,6 @@ export type Prefs = {
   play_color: "white" | "black" | "random";
   play_clock: "none" | "5+3" | "10+5" | "15+10" | "30+0";
   play_hints: number;
-  play_takebacks: boolean;
   play_auto_level: boolean;
   play_level: number;
   play_show_eval: boolean;
@@ -39,7 +38,7 @@ export const DEFAULT_PREFS: Prefs = {
   sound: true, volume: 0.7, auto_next: false, notation: "figurine", tour_done: true, player_names: "",
   update_check: true, dismissed_version: null, goal_rating: 1800, goal_time_class: "auto", chesscom_username: "",
   arrows_best: true, arrows_played: true, arrows_opponent: true, arrows_others: true,
-  play_alarm: "forte", play_color: "white", play_clock: "none", play_hints: 3, play_takebacks: true,
+  play_alarm: "forte", play_color: "white", play_clock: "none", play_hints: 3,
   play_auto_level: true, play_level: 1000, play_show_eval: false, play_punish: true,
 };
 

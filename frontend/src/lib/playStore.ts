@@ -33,8 +33,7 @@ export type PlayGame = {
   timeLeftMs: number | null;
   turnStartedAt: number;  // Date.now() when your turn started
   hintsLeft: number;
-  takebacks: boolean;
-  helped: boolean;        // used a hint or a takeback: the game does not move your level
+  helped: boolean;        // used a hint: the game does not move your level
   judgments: Judgment[];
   streak: number;         // your moves in a row without a mistake or blunder
   bestStreak: number;

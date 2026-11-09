@@ -105,7 +105,7 @@ def play_finish(body: FinishIn, db: Session = Depends(get_db)):
             game_jobs.enqueue_analysis([gid])
     won = (body.result == "1-0") == (body.user_color == "white")
     score = 0.5 if body.result == "1/2-1/2" else 1.0 if won else 0.0
-    # a game you got help in (hints, takebacks), one from a position that is not an even start
+    # a game you got help in (hints), one from a position that is not an even start
     # (an endgame, one of your mistakes, a pasted FEN) or one that never really started does not
     # move your level
     rated = not body.helped and not body.practice and len(body.moves) >= 2

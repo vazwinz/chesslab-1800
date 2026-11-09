@@ -96,15 +96,10 @@
 .badge-pop { animation: badge-pop 160ms ease-out; }
 @keyframes ribbon-in { from { transform: scale(0.2); } to { transform: scale(1); } }
 .ribbon-in { animation: ribbon-in 180ms ease-out; }
-/* "Jogar": the red screen after a mistake or blunder, and the board shaking */
-@keyframes alarm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-.alarm-pulse { animation: alarm-pulse 0.7s ease-in-out infinite; }
-@keyframes alarm-flash { 0% { opacity: 0; } 12% { opacity: 1; } 55% { opacity: 0.85; } 100% { opacity: 0; } }
-.alarm-flash { animation: alarm-flash 1.2s ease-out forwards; }
+/* "Jogar": the board shakes after a mistake or blunder (the red itself just switches on and off) */
 @keyframes board-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-9px); }
   40% { transform: translateX(8px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(3px); } }
 .board-shake { animation: board-shake 0.45s ease-in-out; }
-/* with animations switched off in the system the red stays, still: no pulsing, flashing or shaking */
 @media (prefers-reduced-motion: reduce) {
-  .alarm-pulse, .alarm-flash, .board-shake { animation: none !important; }
+  .board-shake { animation: none !important; }
 }

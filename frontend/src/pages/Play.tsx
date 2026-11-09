@@ -97,7 +97,7 @@ export default function Play() {
     const g: PlayGame = {
       id: Date.now(), startFen: g0.fen(), startLabel: s.label, opening: s.opening, practice: s.practice, moves: [],
       userColor, level, levelName: nameFor(level, levels), clock, timeLeftMs: clock ? clock.base * 1000 : null,
-      turnStartedAt: Date.now(), hintsLeft: prefs.play_hints, takebacks: prefs.play_takebacks, helped: false,
+      turnStartedAt: Date.now(), hintsLeft: prefs.play_hints, helped: false,
       judgments: [], streak: 0, bestStreak: 0, engineEval: null, over: null,
     };
     setErr(null);
@@ -309,22 +309,21 @@ function Setup({ st, starts, levels, onStart, initial }: { st: any; starts: any;
         </Field>
         <Field label="Vermelhão nos seus erros">
           <Seg label="Vermelhão" value={prefs.play_alarm} onChange={(v) => void set({ play_alarm: v })}
-            options={[{ value: "forte", label: "Forte" }, { value: "leve", label: "Leve" }, { value: "desligado", label: "Desligado" }]} />
-          <p className="text-xs text-muted">Forte: a tela fica vermelha e só sai quando você escolher. Leve: pisca e some.</p>
+            options={[{ value: "forte", label: "Tela vermelha" }, { value: "leve", label: "Só a borda" }, { value: "desligado", label: "Desligado" }]} />
+          <p className="text-xs text-muted">Só avisa que você errou: não para a partida, não explica e não deixa voltar. O lance certo aparece no fim.</p>
           <div className="pt-1">
             <Check checked={prefs.play_punish} onChange={(v) => void set({ play_punish: v })}>
               O AURA sempre pune as suas capivaradas, mesmo nos níveis baixos
             </Check>
           </div>
         </Field>
-        <Field label="Ajudas" hint="Dica ou voltar lance tiram a partida do seu nível (ela ainda vai para a revisão).">
+        <Field label="Ajudas" hint="Usar dica tira a partida do seu nível (ela ainda vai para a revisão). Não existe voltar lance.">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <label className="flex items-center gap-2 text-sm">Dicas por partida
               <select className="input w-auto py-1" value={prefs.play_hints} onChange={(e) => void set({ play_hints: +e.target.value })}>
                 {[0, 1, 2, 3, 5].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </label>
-            <Check checked={prefs.play_takebacks} onChange={(v) => void set({ play_takebacks: v })}>Permitir voltar lance</Check>
             <Check checked={prefs.play_show_eval} onChange={(v) => void set({ play_show_eval: v })}>Barra de avaliação</Check>
           </div>
         </Field>
@@ -415,7 +414,6 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
   const turn: Color = chess.turn() === "w" ? "white" : "black";
   const myTurn = !g.over && turn === g.userColor;
   const engineColor: Color = g.userColor === "white" ? "black" : "white";
-  const blocking = !!alarm && prefs.play_alarm === "forte"; // the red screen waits for you; the flash does not
 
   const finishGame = useCallback(async (end: PlayResult, moves: string[]) => {
     const cur = current();
@@ -437,9 +435,9 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
     if (current()) usePlay.getState().patch({ over: { ...end, summary } });
   }, [id, refreshState]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // the computer's move whenever it is its turn (and the red screen is not waiting for you)
+  // the computer's move whenever it is its turn (the red never holds it back)
   useEffect(() => {
-    if (g.over || blocking || turn === g.userColor || busy.current) return;
+    if (g.over || turn === g.userColor || busy.current) return;
     const cur0 = current();
     if (!cur0) return;
     busy.current = true;
@@ -455,7 +453,7 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
       const wait = 350 + Math.random() * 450 - (Date.now() - t0);
       if (wait > 0) await new Promise((res) => setTimeout(res, wait));
       const cur = current();
-      if (!cur || cur.over || cur.moves.length !== movesNow.length) return; // a takeback or a resignation in between
+      if (!cur || cur.over || cur.moves.length !== movesNow.length) return; // you resigned or ran out of time meanwhile
       const mv = tryMove(fenNow, r.move);
       if (!mv) return;
       moveSound(mv.move);
@@ -468,7 +466,7 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
       busy.current = false;
       setThinking(false);
     });
-  }, [fen, blocking, g.over, thinking]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fen, g.over, thinking]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // your clock (only yours runs)
   useEffect(() => {
@@ -483,7 +481,7 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
   }, [flagged]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onMove = (uci: string) => {
-    if (!myTurn || thinking || blocking || busy.current || flagged) return false;
+    if (!myTurn || thinking || busy.current || flagged) return false;
     const fenBefore = fen;
     const r = tryMove(fenBefore, uci);
     if (!r) return false;
@@ -517,24 +515,6 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
       if (end) void finishGame(end, moves);
     });
     return true;
-  };
-
-  const takeBack = () => {
-    const cur = current();
-    if (!cur || !cur.takebacks || cur.over || busy.current) return;
-    const mine = gameFrom(cur.startFen, cur.moves).turn() === (cur.userColor === "white" ? "w" : "b");
-    if (cur.moves.length < (mine ? 2 : 1)) return; // nothing of yours to take back yet
-    const moves = cur.moves.slice(0, mine ? -2 : -1);
-    const judgments = cur.judgments.filter((j) => j.ply < moves.length);
-    let streak = 0;
-    for (const j of judgments) streak = j.verdict === "mistake" || j.verdict === "blunder" ? 0 : streak + 1;
-    const lastKept = judgments[judgments.length - 1];
-    patch({ moves, helped: true, judgments, streak, turnStartedAt: Date.now(),
-      engineEval: lastKept ? -lastKept.eval_after_cp : null }); // not the evaluation after the move you took back
-    setAlarm(null);
-    setLastJ(null);
-    setHint(null);
-    setNote("Lance desfeito: ache um melhor. Esta partida não conta mais para o seu nível.");
   };
 
   const askHint = async () => {
@@ -585,7 +565,7 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
         <div className="flex items-start gap-2">
           {prefs.play_show_eval && <EvalBar cp={ev.cp} mate={ev.mate} orientation={g.userColor} height={boardPx} />}
           <div key={shake} className={`min-w-0 flex-1 ${shake ? "board-shake" : ""}`}>
-            <Board fen={fen} orientation={g.userColor} onMove={onMove} interactive={myTurn && !thinking && !blocking && !flagged}
+            <Board fen={fen} orientation={g.userColor} onMove={onMove} interactive={myTurn && !thinking && !flagged}
               lastMove={last ? [last.from, last.to] : null} arrows={arrows} badges={badges} reserve={250} id="play" onSize={setBoardPx} />
           </div>
         </div>
@@ -603,7 +583,6 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
                 title="A 1ª vez mostra a peça; a 2ª, o lance. A partida deixa de contar para o seu nível.">
                 {hint && !hint.full ? "Mostrar o lance" : `Dica (${g.hintsLeft})`}
               </button>
-              {g.takebacks && <button className="btn btn-sm" onClick={takeBack} disabled={g.moves.length < 1 || thinking}>Voltar lance</button>}
               <button className="btn btn-sm" onClick={offerDraw} disabled={thinking}>Empate?</button>
               <button className={`btn btn-sm ${confirmResign ? "border-bad text-bad" : ""}`} onClick={resign} onBlur={() => setConfirmResign(false)}>
                 {confirmResign ? "Confirmar abandono" : "Abandonar"}
@@ -624,7 +603,7 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
                 <b className={VERDICT[lastJ.verdict]?.tone}>{VERDICT[lastJ.verdict]?.label}</b>
                 {lastJ.verdict === "best" ? <>: <SanText san={lastJ.user_san} /> era exatamente o lance do Stockfish.</>
                   : lastJ.verdict === "good" ? <>: <SanText san={lastJ.user_san} />.</>
-                  : <>: você jogou <SanText san={lastJ.user_san} />, o melhor era <b><SanText san={lastJ.best_san} /></b>.</>}
+                  : <>: <SanText san={lastJ.user_san} />. O lance certo só no fim da partida.</>}
               </p>
             )}
             {hint && !hint.full && <p className="text-sm">Dica: a peça marcada com a estrela tem o melhor lance.</p>}
@@ -641,7 +620,7 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
               </div>
             </div>
             {g.practice ? <p className="text-xs text-faint">Partida de treino: não muda o seu nível.</p>
-              : g.helped && <p className="text-xs text-faint">Você usou dica ou voltou lance: esta partida não muda o seu nível.</p>}
+              : g.helped && <p className="text-xs text-faint">Você usou dica: esta partida não muda o seu nível.</p>}
           </div>
         )}
         <div>
@@ -652,8 +631,8 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
       </aside>
 
       {alarm && prefs.play_alarm !== "desligado" && (
-        <BlunderAlarm key={alarm.ply} judgment={alarm} mode={prefs.play_alarm === "leve" ? "leve" : "forte"} canTakeBack={g.takebacks}
-          punishes={prefs.play_punish && alarm.verdict === "blunder"} onTakeBack={takeBack} onContinue={() => setAlarm(null)} />
+        <BlunderAlarm key={alarm.ply} verdict={alarm.verdict === "blunder" ? "blunder" : "mistake"}
+          mode={prefs.play_alarm === "leve" ? "leve" : "forte"} onDone={() => setAlarm(null)} />
       )}
     </div>
   );
@@ -692,7 +671,7 @@ function EndPanel({ levels, onAgain, onNew }: { levels: Level[]; onAgain: (s: St
               <span className={diff > 0 ? "text-good" : diff < 0 ? "text-bad" : "text-muted"}>({diff > 0 ? "+" : ""}{diff})</span></p>
           ) : (
             <p className="text-muted">{g.practice ? "Partida de treino: não muda o seu nível."
-              : g.helped ? "Você usou dica ou voltou lance: esta partida não muda o seu nível."
+              : g.helped ? "Você usou dica: esta partida não muda o seu nível."
               : "A partida acabou cedo demais para mudar o seu nível."}</p>
           )}
           <p className="text-muted">Próximo nível automático: <b className="text-ink">{sum.next_level}</b> · {sum.next_level_name ?? nameFor(sum.next_level, levels)}</p>
