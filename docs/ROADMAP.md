@@ -4,7 +4,7 @@ This list covers everything that is minimal, unverified or missing. "Verified" m
 
 ## Verified in the build environment (0.4.0)
 
-- **Backend tests**: 91 pass (Stockfish tests ran against the real engine).
+- **Backend tests**: 91 pass (Stockfish tests ran against the real engine). The Windows check below added 7, for 98.
 - **Migrations**: a database written by the real 0.3.0 code (`tests/fixtures/TEST_ONLY_db_v0_3_0.sqlite`) is recognised, checked, backed up, stamped at the 0.3.0 baseline and upgraded with every row intact. A migration that crashes halfway leaves the database as it was (tables, columns and row counts checked). Models and migrations are compared on every test run.
 - **Frozen app**: a Linux PyInstaller build of this spec started headless on a copy of that 0.3.0 database, migrated it from inside the bundle (Alembic reads the shipped migration files), wrote the backup and served 0.4.0.
 - **Installer script**: `desktop/installer.nsi` compiles with NSIS 3.09 without warnings (with the Linux payload as a stand-in).
@@ -14,18 +14,37 @@ This list covers everything that is minimal, unverified or missing. "Verified" m
 - **Resumable download**: drop and resume (HTTP Range), a locked rename (retries, then import straight from the finished download), reuse of an already complete download, all with a local test server.
 - **Coach**: board facts (fork, pin, skewer, discovered attack, mate patterns, pieces left en prise, net material) on known positions; the AI answer validator rejects unknown moves, numbers, false "best move" claims and non-JSON answers, using a fake model.
 
-## Not verified here: please check on your PC
+## Verified on Windows 11 (0.4.0)
 
-- **Windows build and installer.** `desktop/build_windows.ps1` was not run (no Windows here), and the installer was not run on real Windows with the real app: the "close AURA first" check, the upgrade over 0.3.0 (it replaces the old uninstaller, which deleted the whole install folder, with the new one that deletes only AURA's files), and the optional deletion of your data on uninstall.
-- **Windows-only code paths.** DPAPI key encryption, the single-instance lock, the native error dialogs, the window colour read from the Windows theme, and WebView2 behaviour (sounds through WebAudio, the persistent profile in `%LOCALAPPDATA%\AURA\webview`, text selection, Ctrl +/- zoom).
-- **Real services.** The Anthropic API, Ollama and other OpenAI-compatible services were never called (only a fake model in the tests). The Chess.com public API and the GitHub Releases check were tested with recorded or fake responses only. For the update notice to work, the repository must be public and have a Release with `AURA-Setup-<version>.exe` (the workflow creates it when you push a tag).
-- **The real Lichess dataset.** database.lichess.org is blocked from the build environment, so the 300 MB download and the import of the real file were not run here.
-- **Stockfish download for the build.** `fetch_stockfish.py` assumes the release asset names of `sf_17.1`. If the download fails, use `--from <path to stockfish.exe>`.
+On the developer's PC (Windows 11 Pro 26200, Python 3.14.5, Node 26, NSIS 3, Edge WebView2 157), with the real 0.3.0 installation and data, driving the installed app (UI Automation for the installer and dialogs, the DevTools protocol for the window):
+
+- **Build**: `desktop/build_windows.ps1` builds the installer and the portable zip (PyInstaller 6.22, pywebview 6.2.1); `fetch_stockfish.py` downloads Stockfish 17.1 (sse41-popcnt). The 98 backend tests pass with Stockfish 17.1, none skipped; `npx tsc -b` passes.
+- **Upgrade over 0.3.0** installed in a folder of its own (`D:\AURA`): the installer proposes that folder, replaces `_internal` entirely and renames the shortcuts. The first start migrated a real 4 GB database (backup 15 s, migration 0.1 s, the row count of every table unchanged), showed the "Seus dados foram atualizados" notice and wrote `backups/chesslab-copia-da-0.3.0-<date>.db`. The window appears about 19 s after the click, with nothing on screen before it.
+- **"Close AURA first"**: with 0.4.0 open, the installer and the uninstaller both ask to close it; Repetir asks again while it is open and continues once it is closed; Cancelar stops. An open 0.3.0 is not detected (it has no lock).
+- **Uninstall**: deletes only `AURA.exe`, `_internal`, `LICENSE-NOTICE.txt` and `Uninstall.exe` (another file in the folder stayed), removes the shortcuts and registry keys and asks about the data with Não as the default button; Não keeps `%LOCALAPPDATA%\AURA` intact. Reinstalling then proposes `%LOCALAPPDATA%\Programs\AURA` (the custom folder is forgotten on uninstall).
+- **Single instance**: a second start shows "O AURA já está aberto" and exits.
+- **Window**: the colour before the page loads matches the saved theme (light from the first frame; dark too, apart from the frame described below); the chosen theme survives a restart; a move on the board starts a running WebAudio context whose clock advances (the sound itself was not listened to); text can be selected and copied (FEN field, PGN box, page text, the Copiar buttons); Ctrl + / Ctrl - / Ctrl 0 and Ctrl + wheel zoom.
+- **Error dialog**: a corrupted `chesslab.db` gives a dialog in Portuguese with the data folder, the backups and the `aura.log` path; no window opens and the file is not touched.
+- **DPAPI**: a key saved for Claude is stored with `"scheme": "dpapi"`, decrypts only for the Windows user, appears nowhere in plain text in the data folder (database, WAL, log, WebView2 profile), and "Apagar a chave salva" removes it.
+- **The real Lichess dump** (in a temporary data folder): the 310 MB download resumes after closing AURA halfway (HTTP Range; SHA-256 identical to a complete download), the rename works, the import finishes and the file is deleted. All 6,193,530 rows of the November 2026 dump are read.
+- **Chess.com import** of a public account's last month: games downloaded and analysed in the background; real rating and time class come from the headers.
+
+Fixed during this check: the launcher ignored `CHESSLAB_DATA_DIR` for `aura.log` and the window profile; Ctrl + / Ctrl - did nothing (pywebview switches WebView2's browser accelerator keys off); Ctrl+F flipped the analysis board and Ctrl+A opened the analysis after a puzzle; the corrupted-database dialog showed SQLAlchemy's English text; the real Lichess dump (it starts with a pzstd skippable frame) was read as plain CSV and could not be imported.
+
+## Still not verified
+
+- **AI services.** The Anthropic API (waiting for the owner's key), Ollama (not installed on the test PC) and other OpenAI-compatible services were never called; only a fake model in the tests.
+- **The update notice against a real release.** At test time the repository answered 404 to anonymous requests (private), so the check ends in "nenhuma versão publicada (ou repositório privado)". It needs a public repository with a Release containing `AURA-Setup-<version>.exe` (the workflow creates it when you push a tag).
+- **"Seguir o sistema" with Windows in light mode.** The test PC uses dark mode, and Windows settings were not changed for the test.
+- **A dark frame at start.** In the dark theme one or two captured frames (100–200 ms) are `#121212` instead of `#14181F` while the page loads. It does not come from the app's CSS (an explicit root background did not remove it); cosmetic.
+- **Linux.** The Linux build was not re-run after the Windows fixes; the changed launcher code is either Windows-only or covered by tests that run on Linux too.
 - **PostgreSQL.** Untested.
 
 ## The WinError 5 download failure (fixed in 0.4.0)
 
 0.3.0 downloaded the dump to `lichess_db_puzzle.csv.zst.part` and renamed it at the end. On Windows, antivirus software (and sometimes the search indexer) opens a file right after it is written to scan it; while it holds the file, renaming it fails with `[WinError 5] Acesso negado`, even though the download itself was complete. 0.4.0 retries the rename for a few seconds, and if it is still blocked, imports straight from the complete `.part` file. A complete download is reused instead of downloaded again, an interrupted one resumes where it stopped, and the file is deleted after a successful import.
+
+On the developer's PC the failure had a second cause: the first import had stopped at 5,605,000 of 6,193,530 puzzles without finishing (its job record still says "running"), and 0.3.0 closed the dump only when an import read it to the end, so AURA itself still held the `.zst` open when the second download tried to replace it. 0.4.0 closes the file whenever an import ends and refuses a second import while one is running.
 
 ## Minimal versions: what's missing
 
