@@ -21,6 +21,7 @@ The whole interface is in Brazilian Portuguese. These developer docs stay in Eng
 - **Review and analysis boards**: the board stays in view while the explanation scrolls; more arrows (best move, your move, the opponent's threat and the reply that punishes your move, Stockfish's 2nd and 3rd moves), each one switchable; right-click marks squares red and draws arrows that stay; "Próxima partida" and "Anterior" go through your analysed games.
 - **Linux**: pieces can be dragged with the mouse again (the Qt window reports touch support, which switched the board to its touch-only backend).
 - **Move list**: it scrolls itself to the current move without moving the page (on a phone the page used to jump down to the list at every move).
+- **Drawn arrows stay**: arrows drawn with the right mouse button no longer vanish when the engine updates its own (the board library wiped them whenever its arrows changed; the screen's arrows are now drawn separately). Exercises that hold the pieces on purpose (candidate moves, blind calculation, think first) say so under the board instead of the pieces just not moving.
 - **Training fix**: answering or asking for the solution before the opponent's move had finished playing sent a negative time, which the server refused ("tempo deve ser no mínimo 0") and left the puzzle stuck.
 
 ## What's new in 0.4.0
