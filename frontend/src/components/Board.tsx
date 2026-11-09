@@ -1,6 +1,6 @@
 import { Chess, Square } from "chess.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Chessboard } from "react-chessboard";
+import { Chessboard, ChessboardDnDProvider } from "react-chessboard";
 import type { Arrow, PromotionPieceOption } from "react-chessboard/dist/chessboard/types";
 import { usePrefs } from "../lib/prefs";
 import { play } from "../lib/sound";
@@ -39,6 +39,12 @@ const MARK = "rgba(226, 84, 66, 0.72)";
 const DOT = "radial-gradient(circle, rgba(16, 24, 40, 0.26) 21%, transparent 23%)";
 const RING = "radial-gradient(circle, transparent 66%, rgba(16, 24, 40, 0.26) 67%, rgba(16, 24, 40, 0.26) 80%, transparent 81%)";
 const CHECK = "radial-gradient(circle, rgba(255, 50, 40, 0.95) 0%, rgba(230, 20, 10, 0.6) 32%, rgba(200, 0, 0, 0) 74%)";
+// react-chessboard switches to its touch drag backend whenever the browser exposes touch events
+// ("ontouchstart" in window: touchscreens, and the Qt WebEngine window on Linux), and that backend
+// ignores the mouse unless told otherwise, so pieces could not be dragged with a mouse there.
+// With these options the mouse drags too; a few pixels of slop keep a click a click. Browsers
+// without touch events keep the HTML5 drag backend, which ignores these options.
+const DND_OPTIONS = { enableMouseEvents: true, touchSlop: 5 };
 
 export default function Board({ fen, orientation = "white", onMove, interactive = true, lastMove, arrows, badges,
   onHesitation, reserve = 150, maxSize = 780, id = "aura", onSize }: Props) {
@@ -200,6 +206,7 @@ export default function Board({ fen, orientation = "white", onMove, interactive 
     <div ref={wrap} className="relative w-full min-w-0 select-none" style={{ minHeight: width || 260 }}>
       {width > 0 && (
         <div className="relative" style={{ width, height: width }}>
+          <ChessboardDnDProvider options={DND_OPTIONS}>
           <Chessboard
             id={id}
             position={fen}
@@ -228,6 +235,7 @@ export default function Board({ fen, orientation = "white", onMove, interactive 
             animationDuration={prefs.animation_ms}
             snapToCursor
           />
+          </ChessboardDnDProvider>
           {badges?.map((b) => {
             const p = pos(b.square);
             const size = Math.max(18, sq * 0.36);
