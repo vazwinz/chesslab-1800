@@ -1,5 +1,5 @@
 import { Chess, Square } from "chess.js";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Chessboard, ChessboardDnDProvider } from "react-chessboard";
 import type { Arrow, PromotionPieceOption } from "react-chessboard/dist/chessboard/types";
 import { usePrefs } from "../lib/prefs";
@@ -45,6 +45,11 @@ const CHECK = "radial-gradient(circle, rgba(255, 50, 40, 0.95) 0%, rgba(230, 20,
 // With these options the mouse drags too; a few pixels of slop keep a click a click. Browsers
 // without touch events keep the HTML5 drag backend, which ignores these options.
 const DND_OPTIONS = { enableMouseEvents: true, touchSlop: 5 };
+// react-chessboard wipes the arrows you draw with the right mouse button whenever its `customArrows`
+// prop changes, and the analysis board changes its arrows every time the engine reports. So the
+// library never gets any (this array never changes) and the arrows a screen asks for are drawn by
+// FixedArrows below. Yours now go only when the position changes or you click the board.
+const NO_ARROWS: Arrow[] = [];
 
 export default function Board({ fen, orientation = "white", onMove, interactive = true, lastMove, arrows, badges,
   onHesitation, reserve = 150, maxSize = 780, id = "aura", onSize }: Props) {
@@ -194,12 +199,6 @@ export default function Board({ fen, orientation = "white", onMove, interactive 
     }
   }
 
-  // react-chessboard wipes the arrows you drew with the right mouse button whenever `customArrows`
-  // is a new array, and the pages build a new one on every render (an engine update is enough):
-  // keep the same array until the position or the arrows themselves change.
-  const arrowsKey = JSON.stringify(arrows ?? []);
-  const boardArrows = useMemo(() => arrows ?? [], [fen, arrowsKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const sq = width / 8;
   const pos = (square: string) => {
     const f = square.charCodeAt(0) - 97;
@@ -229,7 +228,7 @@ export default function Board({ fen, orientation = "white", onMove, interactive 
             promotionToSquare={promo?.to ?? null}
             isDraggablePiece={({ sourceSquare }) => interactive && mine(sourceSquare as Square)}
             arePiecesDraggable={interactive}
-            customArrows={boardArrows}
+            customArrows={NO_ARROWS}
             customArrowColor={arrowColor}
             customSquareStyles={styles}
             customDarkSquareStyle={{ backgroundColor: theme.dark }}
@@ -242,6 +241,7 @@ export default function Board({ fen, orientation = "white", onMove, interactive 
             snapToCursor
           />
           </ChessboardDnDProvider>
+          {arrows && arrows.length > 0 && <FixedArrows arrows={arrows} width={width} orientation={orientation} fallback={arrowColor} />}
           {badges?.map((b) => {
             const p = pos(b.square);
             const size = Math.max(18, sq * 0.36);
@@ -258,5 +258,42 @@ export default function Board({ fen, orientation = "white", onMove, interactive 
         </div>
       )}
     </div>
+  );
+}
+
+/** The arrows a screen asks for (best move, your move, a hint...), drawn the way react-chessboard
+ *  draws its own, just under the piece being dragged. */
+function FixedArrows({ arrows, width, orientation, fallback }: { arrows: Arrow[]; width: number;
+  orientation: "white" | "black"; fallback: string }) {
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const sq = width / 8;
+  const center = (s: string) => {
+    const f = s.charCodeAt(0) - 97;
+    const r = Number(s[1]) - 1;
+    return orientation === "white" ? { x: f * sq + sq / 2, y: (7 - r) * sq + sq / 2 } : { x: (7 - f) * sq + sq / 2, y: r * sq + sq / 2 };
+  };
+  return (
+    <svg width={width} height={width} aria-hidden className="pointer-events-none absolute left-0 top-0 z-[9]">
+      {arrows.map(([from, to, color], i) => {
+        if (from === to) return null;
+        const a = center(from);
+        const b = center(to);
+        // arrows into the same square from different places stop a little earlier, as in the library
+        const cut = width / (arrows.some((o) => o[0] !== from && o[1] === to) ? 16 : 32);
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const r = Math.hypot(dx, dy);
+        const id = `${uid}-arrow-${i}`;
+        return (
+          <g key={`${from}-${to}-${i}`}>
+            <marker id={id} markerWidth="2" markerHeight="2.5" refX="1.25" refY="1.25" orient="auto">
+              <polygon points="0.3 0, 2 1.25, 0.3 2.5" fill={color ?? fallback} />
+            </marker>
+            <line x1={a.x} y1={a.y} x2={a.x + (dx * (r - cut)) / r} y2={a.y + (dy * (r - cut)) / r} opacity="0.65"
+              stroke={color ?? fallback} strokeWidth={width / 40} markerEnd={`url(#${id})`} />
+          </g>
+        );
+      })}
+    </svg>
   );
 }

@@ -345,6 +345,12 @@ function Session() {
   }
 
   const ratingDelta = result?.rating ? result.rating.after - result.rating.before : 0;
+  // the exercises that hold the pieces on purpose say so on the board, instead of just not moving
+  const lockNote = !ex || result || shown ? null
+    : locked ? `Pense primeiro: xeques, capturas e ameaças. Libera em ${Math.ceil(((ex.min_think_ms ?? 0) - elapsed) / 1000)} s`
+    : ex.candidates && !st.candsDone ? "Antes de mexer: escreva até 3 lances candidatos e confirme."
+    : ex.blind ? "Cálculo às cegas: as peças não mexem. Escreva a linha inteira e envie."
+    : null;
   const severityTone = result ? (result.correct ? "text-good" : "text-bad") : "";
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,400px)]">
@@ -374,12 +380,9 @@ function Session() {
               {err ? <span className="max-w-xs text-center text-muted">{err}</span> : <Spinner label="Carregando o puzzle…" />}
             </div>
           )}
-          {locked && (
-            <div className="pointer-events-none absolute inset-x-0 top-3 z-30 mx-auto w-fit max-w-[90%] rounded-full bg-ink/85 px-4 py-2 text-sm font-bold text-paper shadow-lg">
-              Pense primeiro: xeques, capturas e ameaças. Libera em {Math.ceil(((ex?.min_think_ms ?? 0) - elapsed) / 1000)} s
-            </div>
-          )}
         </div>
+        {/* under the board, not over it: these exercises are about looking at the whole position */}
+        {lockNote && <p className="mt-2 rounded-lg bg-ink/85 px-4 py-2 text-center text-sm font-bold text-paper">{lockNote}</p>}
         {ribbon.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-1" aria-label={`Resultados da sessão: ${ribbon.filter((r) => r === "ok").length} de ${ribbon.length}`}>
             {ribbon.slice(-40).map((r, i) => (
