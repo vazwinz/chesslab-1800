@@ -194,6 +194,12 @@ export default function Board({ fen, orientation = "white", onMove, interactive 
     }
   }
 
+  // react-chessboard wipes the arrows you drew with the right mouse button whenever `customArrows`
+  // is a new array, and the pages build a new one on every render (an engine update is enough):
+  // keep the same array until the position or the arrows themselves change.
+  const arrowsKey = JSON.stringify(arrows ?? []);
+  const boardArrows = useMemo(() => arrows ?? [], [fen, arrowsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const sq = width / 8;
   const pos = (square: string) => {
     const f = square.charCodeAt(0) - 97;
@@ -223,7 +229,7 @@ export default function Board({ fen, orientation = "white", onMove, interactive 
             promotionToSquare={promo?.to ?? null}
             isDraggablePiece={({ sourceSquare }) => interactive && mine(sourceSquare as Square)}
             arePiecesDraggable={interactive}
-            customArrows={arrows}
+            customArrows={boardArrows}
             customArrowColor={arrowColor}
             customSquareStyles={styles}
             customDarkSquareStyle={{ backgroundColor: theme.dark }}

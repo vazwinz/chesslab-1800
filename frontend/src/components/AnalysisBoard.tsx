@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Arrow } from "react-chessboard/dist/chessboard/types";
+import { ARROW_KINDS, isRealThreat, nullMoveFen, pickArrows } from "../lib/arrows";
 import { evalLabel, tryMove, turnOf, walk, whiteScore } from "../lib/chess";
+import { usePrefs } from "../lib/prefs";
 import { moveSound } from "../lib/sound";
 import { useEngine } from "../lib/useEngine";
+import ArrowToggles from "./ArrowToggles";
 import Board from "./Board";
 import EvalBar from "./EvalBar";
 import Explain from "./Explain";
@@ -45,6 +47,10 @@ export default function AnalysisBoard({ startFen, initialMoves = [], initialCurs
   const fen = cursor === 0 ? startFen : steps[cursor - 1]?.fen ?? startFen;
   const lastMove = cursor > 0 ? steps[cursor - 1]?.lastMove ?? null : null;
   const { result, busy, error } = useEngine(fen, engine, depth, 3);
+  const { prefs } = usePrefs();
+  // the opponent's threat: Stockfish on the same position with the opponent to move (a "pass")
+  const threatFen = useMemo(() => (engine && prefs.arrows_opponent ? nullMoveFen(fen) : null), [fen, engine, prefs.arrows_opponent]);
+  const { result: threatRes } = useEngine(threatFen, !!threatFen, Math.min(depth, 14), 1);
   useEffect(() => onPositionChange?.(fen, moves, cursor), [fen]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setShowExplain(false), [fen]);
 
@@ -80,7 +86,11 @@ export default function AnalysisBoard({ startFen, initialMoves = [], initialCurs
 
   const best = result?.lines?.[0];
   const ws = best ? whiteScore(best.cp, best.mate, fen) : { cp: null, mate: null };
-  const arrows: Arrow[] = engine && best ? [[best.move.slice(0, 2), best.move.slice(2, 4), "rgba(41, 68, 184, 0.78)"] as Arrow] : [];
+  const threat = threatFen && best && !result?.terminal && isRealThreat(best.cp, best.mate, threatRes?.lines?.[0])
+    ? threatRes!.lines[0] : null;
+  const arrows = engine && result
+    ? pickArrows(prefs, [["opponent", threat?.move], ["others", result.lines[2]?.move], ["others", result.lines[1]?.move], ["best", best?.move]])
+    : [];
   const [boardPx, setBoardPx] = useState(480);
   const startTurn = turnOf(startFen) === "white" ? "w" : "b";
   const startNo = Number(startFen.split(" ")[5] || 1);
@@ -103,6 +113,7 @@ export default function AnalysisBoard({ startFen, initialMoves = [], initialCurs
           <button className="btn-quiet btn-sm" onClick={() => setOrientation((x) => (x === "white" ? "black" : "white"))} aria-label="Girar o tabuleiro"><Icon name="flip" /></button>
           <span className="ml-auto text-xs text-faint">Setas ← → navegam · F gira</span>
         </div>
+        {engine && <div className="mt-2"><ArrowToggles kinds={["best", "others", "opponent"]} /></div>}
       </div>
 
       <aside className="min-w-0 space-y-5">
@@ -136,6 +147,12 @@ export default function AnalysisBoard({ startFen, initialMoves = [], initialCurs
                   </button>
                 );
               })}
+              {threat && prefs.arrows_opponent && (
+                <p className="flex items-center gap-2 px-2 text-sm">
+                  <span aria-hidden className="inline-block h-1.5 w-5 shrink-0 rounded-full" style={{ background: ARROW_KINDS.opponent.color }} />
+                  <span className="text-muted">Ameaça do adversário, se fosse a vez dele:</span> <b><SanText san={threat.san} /></b>
+                </p>
+              )}
               {result && <p className="px-2 text-xs text-faint">{result.engine}, profundidade {best?.depth ?? "—"}{busy ? " · atualizando" : ""}</p>}
             </div>
           )}

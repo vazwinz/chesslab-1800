@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import ArrowToggles from "../components/ArrowToggles";
 import Board from "../components/Board";
 import Explain from "../components/Explain";
 import Help from "../components/Help";
@@ -7,7 +8,8 @@ import Icon from "../components/Icon";
 import MoveList from "../components/MoveList";
 import { Bar, Empty, ErrorNote, Metric, PageHeader, SanText, Spinner } from "../components/ui";
 import { api } from "../lib/api";
-import { turnOf, walk } from "../lib/chess";
+import { ARROW_KINDS, ArrowKind, nullMoveFen, pickArrows } from "../lib/arrows";
+import { tryMove, turnOf, walk } from "../lib/chess";
 import { dateOnly, duration, num } from "../lib/format";
 import { TIME_CLASS, useMeta } from "../lib/meta";
 import { usePrefs } from "../lib/prefs";
@@ -221,11 +223,24 @@ function Review({ id }: { id: number }) {
   const [cursor, setCursor] = useState(0);
   const [focus, setFocus] = useState<any>(null);
   const [preview, setPreview] = useState<{ fen: string; lastMove: [string, string] | null } | null>(null);
+  const [order, setOrder] = useState<number[]>([]);
   const meta = useMeta();
+  const { prefs } = usePrefs();
+  const nav = useNavigate();
 
   useEffect(() => {
-    api.get(`/api/games/${id}`).then((x) => { setG(x); setCursor(0); }).catch((e) => setErr(e.message));
+    api.get(`/api/games/${id}`).then((x) => {
+      setG(x);
+      setCursor(0);
+      setFocus(null);
+      setPreview(null);
+      window.scrollTo(0, 0);
+    }).catch((e) => setErr(e.message));
   }, [id]);
+  // the analysed games in the list's order (newest first), for "Anterior" / "Próxima partida"
+  useEffect(() => {
+    api.get<any[]>("/api/games").then((list) => setOrder(list.filter((x) => x.analyzed).map((x) => x.id))).catch(() => {});
+  }, []);
   const steps = useMemo(() => (g ? walk(g.start_fen, g.moves_uci) : []), [g]);
   const marks = useMemo(() => {
     const m: Record<number, any> = {};
@@ -237,7 +252,7 @@ function Review({ id }: { id: number }) {
     if (n === cursor + 1 && steps[cursor]) moveSound({ san: steps[cursor].san, flags: steps[cursor].flags });
     setPreview(null);
     setCursor(n);
-    setFocus(marks[n - 1] ?? null);
+    setFocus(marks[n] ?? marks[n - 1] ?? null); // a mistake of yours about to be played here, or just played
   }, [steps, cursor, marks]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -260,8 +275,24 @@ function Review({ id }: { id: number }) {
     setCursor(m.ply);
     setFocus(m);
   };
-  const bestArrow = focus && cursor === focus.ply && !preview
-    ? [[focus.best_uci.slice(0, 2), focus.best_uci.slice(2, 4), "rgba(29, 138, 78, 0.8)"] as any] : [];
+  // Arrows at your mistakes: just before you play one, the best move, your move and the opponent's
+  // threat; right after it, the opponent's reply that punishes it. Each kind can be switched off.
+  const upcoming = preview ? null : marks[cursor] ?? null;
+  const justPlayed = preview || cursor === 0 ? null : marks[cursor - 1] ?? null;
+  const threatOf = (m: any): string | null => ((m?.evidence?.threat_cp ?? 0) >= 100 ? m.evidence.threat_move ?? null : null);
+  const arrows = upcoming
+    ? pickArrows(prefs, [["opponent", threatOf(upcoming)], ["played", upcoming.move_uci], ["best", upcoming.best_uci]])
+    : justPlayed ? pickArrows(prefs, [["opponent", justPlayed.evidence?.refutation]]) : [];
+  const sanOf = (from: string | null, uci?: string | null) => (from && uci ? tryMove(from, uci)?.move.san ?? null : null);
+  const notes: { kind: ArrowKind; san: string | null; text: string }[] = upcoming
+    ? [{ kind: "best", san: upcoming.best, text: "o melhor lance" },
+       { kind: "played", san: upcoming.move, text: "o seu lance" },
+       { kind: "opponent", san: sanOf(nullMoveFen(fen), threatOf(upcoming)), text: "a ameaça do adversário, se fosse a vez dele" }]
+    : justPlayed ? [{ kind: "opponent", san: sanOf(fen, justPlayed.evidence?.refutation), text: "a resposta do adversário que pune o lance" }] : [];
+  const shownNotes = notes.filter((n) => n.san && prefs[ARROW_KINDS[n.kind].pref]);
+  const idx = order.indexOf(id);
+  const prevId = idx > 0 ? order[idx - 1] : null;
+  const nextId = idx >= 0 && idx + 1 < order.length ? order[idx + 1] : null;
 
   return (
     <div>
@@ -269,19 +300,27 @@ function Review({ id }: { id: number }) {
         <Link className="btn-quiet btn-sm -ml-2" to="/partidas"><Icon name="back" size={18} />Partidas</Link>
         <h1 className="text-xl">{g.white} × {g.black} <span className="text-muted">{g.result}</span></h1>
         <span className="text-sm text-muted">{dateOnly(g.date)}{g.time_class ? `, ${TIME_CLASS[g.time_class]}` : ""}{g.user_elo ? `, seu rating ${g.user_elo}` : ""}</span>
+        {idx >= 0 && order.length > 1 && (
+          <span className="ml-auto flex items-center gap-1">
+            <span className="tnum mr-1 text-xs text-muted">{idx + 1} de {order.length}</span>
+            <button className="btn-quiet btn-sm" disabled={!prevId} onClick={() => prevId && nav(`/partidas/${prevId}`)}><Icon name="back" size={18} />Anterior</button>
+            <button className="btn btn-sm" disabled={!nextId} onClick={() => nextId && nav(`/partidas/${nextId}`)}>Próxima partida<Icon name="forward" size={18} /></button>
+          </span>
+        )}
       </div>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         {/* the board stays in view while the mistakes and the explanation scroll past it */}
         <div className="min-w-0 xl:sticky xl:top-6 xl:self-start">
-          <Board fen={fen} orientation={orientation} interactive={false} lastMove={lastMove} arrows={bestArrow}
-            badges={focus && cursor === focus.ply + 1 && !preview ? [{ square: focus.move_uci.slice(2, 4), kind: "bad" }] : []} reserve={170} id="review" />
+          <Board fen={fen} orientation={orientation} interactive={false} lastMove={lastMove} arrows={arrows}
+            badges={justPlayed ? [{ square: justPlayed.move_uci.slice(2, 4), kind: "bad" }] : []} reserve={170} id="review" />
           <div className="mt-3 flex items-center gap-1">
             <button className="btn-quiet btn-sm" onClick={() => go(0)} aria-label="Início"><Icon name="first" /></button>
-            <button className="btn-quiet btn-sm" onClick={() => go(cursor - 1)} aria-label="Anterior"><Icon name="back" /></button>
-            <button className="btn-quiet btn-sm" onClick={() => go(cursor + 1)} aria-label="Próximo"><Icon name="forward" /></button>
+            <button className="btn-quiet btn-sm" onClick={() => go(cursor - 1)} aria-label="Lance anterior"><Icon name="back" /></button>
+            <button className="btn-quiet btn-sm" onClick={() => go(cursor + 1)} aria-label="Próximo lance"><Icon name="forward" /></button>
             <button className="btn-quiet btn-sm" onClick={() => go(steps.length)} aria-label="Fim"><Icon name="last" /></button>
             {preview && <button className="link ml-3 text-sm" onClick={() => setPreview(null)}>voltar à partida</button>}
           </div>
+          <div className="mt-2"><ArrowToggles kinds={["best", "played", "opponent"]} /></div>
         </div>
         <aside className="min-w-0 space-y-6">
           <div className="grid grid-cols-3 gap-4">
@@ -308,8 +347,19 @@ function Review({ id }: { id: number }) {
           </div>
           {focus && (
             <div className="space-y-2">
-              <p className="text-sm text-muted">Lance {Math.floor(focus.ply / 2) + 1}: você jogou <b className="text-ink"><SanText san={focus.move} /></b>; o Stockfish preferia <b className="text-good"><SanText san={focus.best} /></b> (seta verde).
-                {focus.think_s != null && ` Você pensou ${String(Math.round(focus.think_s * 10) / 10).replace(".", ",")} s.`}</p>
+              <p className="text-sm text-muted">Lance {Math.floor(focus.ply / 2) + 1}: você jogou <b className="text-ink"><SanText san={focus.move} /></b>; o Stockfish preferia <b className="text-good"><SanText san={focus.best} /></b>.
+                {focus.think_s != null && ` Você pensou ${String(Math.round(focus.think_s * 10) / 10).replace(".", ",")} s.`}
+                {cursor === focus.ply + 1 && !preview && <> <button className="link" onClick={() => go(focus.ply)}>Voltar para antes do lance</button></>}</p>
+              {shownNotes.length > 0 && (
+                <ul className="space-y-1 rounded-lg bg-sunk/50 px-3 py-2 text-sm" aria-label="O que as setas mostram">
+                  {shownNotes.map((n) => (
+                    <li key={n.kind} className="flex items-center gap-2">
+                      <span aria-hidden className="inline-block h-1.5 w-5 shrink-0 rounded-full" style={{ background: ARROW_KINDS[n.kind].color }} />
+                      <b><SanText san={n.san!} /></b><span className="text-muted">{n.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <Explain key={focus.id} request={{ game_mistake_id: focus.id }} onPreview={(f, lm) => setPreview({ fen: f, lastMove: lm })} />
             </div>
           )}
@@ -318,6 +368,11 @@ function Review({ id }: { id: number }) {
             <MoveList moves={steps.map((s, i) => ({ san: s.san, mark: marks[i]?.severity ?? null }))} cursor={cursor} onJump={go}
               startTurn={turnOf(g.start_fen) === "white" ? "w" : "b"} maxHeight={440} />
           </div>
+          {nextId && (
+            <div className="border-t border-rule pt-4">
+              <button className="btn-primary w-full" onClick={() => nav(`/partidas/${nextId}`)}>Próxima partida<Icon name="forward" size={18} /></button>
+            </div>
+          )}
         </aside>
       </div>
     </div>

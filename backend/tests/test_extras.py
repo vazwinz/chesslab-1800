@@ -26,6 +26,16 @@ def test_prefs_roundtrip_and_validation(client):
     assert client.put("/api/prefs", json={"sound": "sim"}).status_code == 422
 
 
+def test_board_arrows_are_on_by_default_and_each_can_be_switched_off(client):
+    kinds = ("arrows_best", "arrows_played", "arrows_opponent", "arrows_others")
+    p = client.get("/api/prefs").json()
+    assert all(p[k] is True for k in kinds)
+    p = client.put("/api/prefs", json={"arrows_others": False, "arrows_opponent": False}).json()
+    assert p["arrows_others"] is False and p["arrows_opponent"] is False and p["arrows_best"] is True
+    assert client.get("/api/prefs").json()["arrows_others"] is False, "remembered in the database"
+    assert client.put("/api/prefs", json={"arrows_best": "sim"}).status_code == 422
+
+
 def test_validation_errors_are_in_portuguese(client):
     r = client.post("/api/sessions", json={"kind": "nonsense"})
     assert r.status_code == 422 and r.json()["detail"].startswith("Dados inválidos: modo de treino")

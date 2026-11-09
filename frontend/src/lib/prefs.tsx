@@ -19,12 +19,17 @@ export type Prefs = {
   goal_rating: number;
   goal_time_class: "auto" | "bullet" | "blitz" | "rapid" | "daily";
   chesscom_username: string;
+  arrows_best: boolean;
+  arrows_played: boolean;
+  arrows_opponent: boolean;
+  arrows_others: boolean;
 };
 
 export const DEFAULT_PREFS: Prefs = {
   theme: "system", board_theme: "grafite", show_coordinates: true, show_legal_moves: true, animation_ms: 180,
   sound: true, volume: 0.7, auto_next: false, notation: "figurine", tour_done: true, player_names: "",
   update_check: true, dismissed_version: null, goal_rating: 1800, goal_time_class: "auto", chesscom_username: "",
+  arrows_best: true, arrows_played: true, arrows_opponent: true, arrows_others: true,
 };
 
 type Ctx = { prefs: Prefs; ready: boolean; set: (p: Partial<Prefs>) => Promise<void>; dark: boolean };
