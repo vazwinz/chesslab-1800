@@ -31,6 +31,13 @@ On the developer's PC (Windows 11 Pro 26200, Python 3.14.5, Node 26, NSIS 3, Edg
 
 Fixed during this check: the launcher ignored `CHESSLAB_DATA_DIR` for `aura.log` and the window profile; Ctrl + / Ctrl - did nothing (pywebview switches WebView2's browser accelerator keys off); Ctrl+F flipped the analysis board and Ctrl+A opened the analysis after a puzzle; the corrupted-database dialog showed SQLAlchemy's English text; the real Lichess dump (it starts with a pzstd skippable frame) was read as plain CSV and could not be imported.
 
+## Verified since 0.4.0
+
+- **Backend tests**: 110 pass with Stockfish 17.1 (11 of them for Jogar: every level plays legal moves, the top level finds a mate and the bottom one varies, the judge flags a blunder and names the punishing reply, a win raises your level while a game with help or from a practice position does not move it, a game from a position is saved from it, illegal games are refused).
+- **Jogar in a browser** (Windows 11, the built frontend served by the backend on a temporary data folder, desktop 1600×900 and phone 375×812): a best move is labelled as such; a blunder brings the red screen with your move, the best one and the punishing reply; "Seguir e aguentar" lets the computer play that reply; "Voltar o lance" (button and the Z key) takes back the move pair; the "leve" flash does not stop the game; the hint shows the piece, then the move; resigning with help leaves the level alone and a rated loss lowers it (800 → 652 on a first game, when the uncertainty is highest); a game from an endgame is a practice game; the games appear in Partidas and are analysed; "Jogar daqui" from the review and from the analysis board starts the game, or waits while another game is in progress.
+
+Not verified: Jogar inside the packaged desktop window (only in a browser), the clock beyond counting down (the increment, stopping on the computer's turn, losing on time), the sounds and the phone vibration (not heard or felt), and with animations switched on in Windows (the test PC has them off, so the red screen was seen still, without pulsing or shaking).
+
 ## Still not verified
 
 - **AI services.** The Anthropic API (waiting for the owner's key), Ollama (not installed on the test PC) and other OpenAI-compatible services were never called; only a fake model in the tests.
@@ -57,5 +64,6 @@ On the developer's PC the failure had a second cause: the first import had stopp
 - **Closed-loop outcome.** Simple pre/post comparison with no control condition. A natural next step is an A/B design that alternates two interventions within the same error category.
 - **Auth and multi-user.** Not implemented. AURA is a single-user local application and the server only accepts connections from the same computer.
 - **Frontend tests.** Only the Playwright tests, no component tests. The chart library is the largest chunk (about 400 kB) and loads only on the screens that use it.
+- **Jogar.** The levels are not calibrated against human ratings: they come from search depth, how many of Stockfish's top moves the computer picks from and how randomly, and a share of random moves at the bottom levels. Your level against AURA is Glicko-1 with the computer's level as a fixed rating (RD 60) and, as with puzzles, RD does not grow with inactivity. The judge searches to depth 12, so a slow positional mistake can pass as a good move. The game in progress lives in the window's session storage: closing the app drops it without a result. AURA games count in the Error DNA and in the loop's game measure like imported games; if they skew the loop's comparison, leaving out `source = "aura"` there is a one-line change.
 - **WebAssembly Stockfish fallback.** Not built. A native binary is required.
 - **Code signing.** The Windows build is not signed, so SmartScreen warns on first run.

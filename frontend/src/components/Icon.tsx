@@ -22,6 +22,7 @@ const PATHS: Record<string, string> = {
   mute: "M11 5 6 9H2v6h4l5 4zM23 9l-6 6M17 9l6 6",
   download: "M12 3v12M7 10l5 5 5-5M5 21h14",
   bolt: "M13 2 3 14h9l-1 8 10-12h-9z",
+  play: "M12 3.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2zM9 10h6M10.2 10c0 3-1.2 5-2.7 6.5h9c-1.5-1.5-2.7-3.5-2.7-6.5M6.3 20.5h11.4l-.6-4H6.9z",
 };
 
 export default function Icon({ name, size = 20, className = "" }: { name: keyof typeof PATHS | string; size?: number;

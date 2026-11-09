@@ -9,6 +9,7 @@ import Tour from "./Tour";
 const NAV: { to: string; label: string; icon: string; group: number }[] = [
   { to: "/", label: "Início", icon: "home", group: 0 },
   { to: "/treinar", label: "Treinar", icon: "train", group: 0 },
+  { to: "/jogar", label: "Jogar", icon: "play", group: 0 },
   { to: "/partidas", label: "Partidas", icon: "games", group: 0 },
   { to: "/analise", label: "Análise", icon: "analysis", group: 0 },
   { to: "/aberturas", label: "Aberturas", icon: "book", group: 1 },
@@ -18,7 +19,7 @@ const NAV: { to: string; label: string; icon: string; group: number }[] = [
   { to: "/guia", label: "Como treinar", icon: "guide", group: 3 },
   { to: "/configuracoes", label: "Configurações", icon: "settings", group: 3 },
 ];
-const MOBILE_TABS = ["/", "/treinar", "/partidas", "/analise"];
+const MOBILE_TABS = ["/", "/treinar", "/jogar", "/partidas", "/analise"];
 
 export default function Shell({ children }: { children: ReactNode }) {
   const { prefs, ready, set, dark } = usePrefs();
@@ -140,7 +141,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       </main>
 
       {/* mobile bottom tabs */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-rule bg-sheet/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="Atalhos">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-rule bg-sheet/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="Atalhos">
         {MOBILE_TABS.map((to) => {
           const n = NAV.find((x) => x.to === to)!;
           return (

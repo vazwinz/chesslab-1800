@@ -114,7 +114,7 @@ try {
       check(!(await page.getByRole("alert").count()), `${theme}: Diagnóstico › ${label} sem erro`);
       if (theme === "light" || ["fadiga", "erros"].includes(tab)) await shot(page, `${theme}-diagnostico-${tab}`, true);
     }
-    for (const [path, name] of [["/plano", "plano"], ["/aberturas", "aberturas"], ["/finais", "finais"], ["/guia", "guia"], ["/configuracoes", "configuracoes"]]) {
+    for (const [path, name] of [["/jogar", "jogar"], ["/plano", "plano"], ["/aberturas", "aberturas"], ["/finais", "finais"], ["/guia", "guia"], ["/configuracoes", "configuracoes"]]) {
       await page.goto(`${BASE}${path}`);
       await page.waitForTimeout(700);
       check(!(await page.getByRole("alert").count()), `${theme}: ${path} sem erro`);
@@ -137,7 +137,7 @@ try {
   const m = await browser.newContext({ ...devices["iPhone 13"] });
   const mp = await m.newPage();
   mp.on("pageerror", (e) => errors.push(`mobile: ${e}`));
-  for (const path of ["/", "/treinar", "/partidas", "/diagnostico?aba=erros", "/guia", "/configuracoes"]) {
+  for (const path of ["/", "/treinar", "/jogar", "/partidas", "/diagnostico?aba=erros", "/guia", "/configuracoes"]) {
     await mp.goto(`${BASE}${path}`);
     await mp.waitForTimeout(900);
     await noOverflow(mp, path);

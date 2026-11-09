@@ -38,6 +38,7 @@ DEFAULTS: dict = {
     "play_auto_level": True,    # the level follows your rating against the computer
     "play_level": 1000,         # the level when it does not
     "play_show_eval": False,    # evaluation bar during the game
+    "play_punish": True,        # after your blunder the computer always plays the move that punishes it
 }
 CHOICES = {
     "theme": {"system", "light", "dark"},

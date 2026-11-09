@@ -12,6 +12,7 @@ import { ARROW_KINDS, ArrowKind, nullMoveFen, pickArrows } from "../lib/arrows";
 import { tryMove, turnOf, walk } from "../lib/chess";
 import { dateOnly, duration, num } from "../lib/format";
 import { TIME_CLASS, useMeta } from "../lib/meta";
+import { playFromHref } from "../lib/playStore";
 import { usePrefs } from "../lib/prefs";
 import { moveSound } from "../lib/sound";
 
@@ -350,6 +351,10 @@ function Review({ id }: { id: number }) {
               <p className="text-sm text-muted">Lance {Math.floor(focus.ply / 2) + 1}: você jogou <b className="text-ink"><SanText san={focus.move} /></b>; o Stockfish preferia <b className="text-good"><SanText san={focus.best} /></b>.
                 {focus.think_s != null && ` Você pensou ${String(Math.round(focus.think_s * 10) / 10).replace(".", ",")} s.`}
                 {cursor === focus.ply + 1 && !preview && <> <button className="link" onClick={() => go(focus.ply)}>Voltar para antes do lance</button></>}</p>
+              <Link className="btn btn-sm" to={playFromHref(focus.fen, turnOf(focus.fen),
+                `Do seu erro contra ${g.user_color === "white" ? g.black : g.white}, lance ${Math.floor(focus.ply / 2) + 1}`)}>
+                <Icon name="play" size={16} />Jogar daqui contra o computador
+              </Link>
               {shownNotes.length > 0 && (
                 <ul className="space-y-1 rounded-lg bg-sunk/50 px-3 py-2 text-sm" aria-label="O que as setas mostram">
                   {shownNotes.map((n) => (

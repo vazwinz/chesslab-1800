@@ -12,8 +12,15 @@ export default function MoveList({ moves, cursor, onJump, startTurn = "w", start
   moves: ListMove[]; cursor: number; onJump: (ply: number) => void; startTurn?: "w" | "b"; startNumber?: number;
   maxHeight?: number }) {
   const box = useRef<HTMLDivElement>(null);
+  // keep the current move in view by scrolling the list itself, never the page: on a phone the list
+  // sits below the board, and scrolling the page to it would push the board out of view at every move
   useEffect(() => {
-    box.current?.querySelector("[data-current='true']")?.scrollIntoView({ block: "nearest" });
+    const b = box.current;
+    const el = b?.querySelector<HTMLElement>("[data-current='true']");
+    if (!b || !el) return;
+    const br = b.getBoundingClientRect(), er = el.getBoundingClientRect();
+    if (er.top < br.top) b.scrollTop -= br.top - er.top;
+    else if (er.bottom > br.bottom) b.scrollTop += er.bottom - br.bottom;
   }, [cursor]);
   const cells = startTurn === "b" ? [null, ...moves] : moves;
   const rows: (ListMove | null)[][] = [];

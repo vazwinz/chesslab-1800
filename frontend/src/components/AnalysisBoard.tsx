@@ -1,6 +1,9 @@
+import { Chess } from "chess.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { ARROW_KINDS, isRealThreat, nullMoveFen, pickArrows } from "../lib/arrows";
 import { evalLabel, tryMove, turnOf, walk, whiteScore } from "../lib/chess";
+import { playFromHref } from "../lib/playStore";
 import { usePrefs } from "../lib/prefs";
 import { moveSound } from "../lib/sound";
 import { useEngine } from "../lib/useEngine";
@@ -95,6 +98,13 @@ export default function AnalysisBoard({ startFen, initialMoves = [], initialCurs
   const startTurn = turnOf(startFen) === "white" ? "w" : "b";
   const startNo = Number(startFen.split(" ")[5] || 1);
   const prevFen = cursor > 1 ? steps[cursor - 2]?.fen : startFen;
+  const finished = useMemo(() => {
+    try {
+      return new Chess(fen).isGameOver();
+    } catch {
+      return true;
+    }
+  }, [fen]);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -111,6 +121,11 @@ export default function AnalysisBoard({ startFen, initialMoves = [], initialCurs
           <button className="btn-quiet btn-sm" onClick={() => go(cursor + 1)} aria-label="Próximo lance"><Icon name="forward" /></button>
           <button className="btn-quiet btn-sm" onClick={() => go(moves.length)} aria-label="Último lance"><Icon name="last" /></button>
           <button className="btn-quiet btn-sm" onClick={() => setOrientation((x) => (x === "white" ? "black" : "white"))} aria-label="Girar o tabuleiro"><Icon name="flip" /></button>
+          {!finished && (
+            <Link className="btn-quiet btn-sm" to={playFromHref(fen, turnOf(fen), "Posição da análise")} title="Jogar esta posição contra o computador, com as peças de quem tem a vez">
+              <Icon name="play" />Jogar daqui
+            </Link>
+          )}
           <span className="ml-auto text-xs text-faint">Setas ← → navegam · F gira</span>
         </div>
         {engine && <div className="mt-2"><ArrowToggles kinds={["best", "others", "opponent"]} /></div>}

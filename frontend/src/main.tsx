@@ -11,6 +11,7 @@ import Train from "./pages/Train";
 // Train is the screen used most, so it ships in the main bundle; the others load on first visit.
 const Home = lazy(() => import("./pages/Home"));
 const Games = lazy(() => import("./pages/Games"));
+const Play = lazy(() => import("./pages/Play"));
 const Analysis = lazy(() => import("./pages/Analysis"));
 const Openings = lazy(() => import("./pages/Openings"));
 const Endgames = lazy(() => import("./pages/Endgames"));
@@ -68,6 +69,7 @@ function Pages() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/treinar" element={<Train />} />
+          <Route path="/jogar" element={<Play />} />
           <Route path="/partidas" element={<Games />} />
           <Route path="/partidas/:id" element={<Games />} />
           <Route path="/analise" element={<Analysis />} />

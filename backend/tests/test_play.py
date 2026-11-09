@@ -86,6 +86,13 @@ def test_a_win_raises_your_level_and_a_helped_game_does_not_count(client, no_ana
                                                     "user_color": "white", "level": 800, "result": "0-1",
                                                     "reason": "abandono", "helped": True}).json()
     assert not helped["rated"] and helped["rating_after"] == r["rating_after"]
+    endgame = "8/8/8/4k3/8/8/8/3QK3 w - - 0 1"
+    practice = client.post("/api/play/finish", json={"start_fen": endgame, "moves": ["d1d2", "e5e4"],
+                                                      "user_color": "white", "level": 800, "result": "1-0",
+                                                      "reason": "abandono", "practice": True}).json()
+    assert not practice["rated"] and practice["rating_after"] == r["rating_after"]
+    g = client.get(f"/api/games/{practice['game_id']}").json()
+    assert g["start_fen"] == endgame and g["moves_uci"] == ["d1d2", "e5e4"], "a game from a position is saved from it"
     st = client.get("/api/play/state").json()
     assert st["games"] == 1 and st["wins"] == 1 and len(st["history"]) == 1
 
@@ -132,6 +139,7 @@ def test_move_and_judge_endpoints(client):
 def test_play_preferences(client):
     p = client.get("/api/prefs").json()
     assert p["play_alarm"] == "forte" and p["play_hints"] == 3 and p["play_auto_level"] is True
+    assert p["play_punish"] is True
     assert client.put("/api/prefs", json={"play_alarm": "gritar"}).status_code == 422
     p = client.put("/api/prefs", json={"play_hints": 9, "play_level": 50, "play_clock": "10+5"}).json()
     assert p["play_hints"] == 5 and p["play_level"] == 400 and p["play_clock"] == "10+5"

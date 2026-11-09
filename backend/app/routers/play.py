@@ -84,6 +84,7 @@ class FinishIn(BaseModel):
     result: Literal["1-0", "0-1", "1/2-1/2"]
     reason: str = Field("", max_length=40)
     helped: bool = False
+    practice: bool = False  # started from an endgame, one of your mistakes or a pasted FEN
     time_control: str | None = Field(None, max_length=20)
     opening: str | None = Field(None, max_length=80)
 
@@ -104,8 +105,10 @@ def play_finish(body: FinishIn, db: Session = Depends(get_db)):
             game_jobs.enqueue_analysis([gid])
     won = (body.result == "1-0") == (body.user_color == "white")
     score = 0.5 if body.result == "1/2-1/2" else 1.0 if won else 0.0
-    # a game you got help in (hints, takebacks) or that never really started does not move your level
-    rated = not body.helped and len(body.moves) >= 2
+    # a game you got help in (hints, takebacks), one from a position that is not an even start
+    # (an endgame, one of your mistakes, a pasted FEN) or one that never really started does not
+    # move your level
+    rated = not body.helped and not body.practice and len(body.moves) >= 2
     out = {"game_id": gid, "rated": rated, "score": score}
     if rated:
         out.update(play.record(db, body.level, score, gid))

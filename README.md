@@ -14,6 +14,13 @@ The whole interface is in Brazilian Portuguese. These developer docs stay in Eng
 | Engine | Stockfish (native binary, UCI), bundled in the desktop app |
 | Puzzles | Lichess puzzle database (CC0), downloaded and imported from inside the app |
 
+## Since 0.4.0 (next version)
+
+- **Jogar**: a game against the computer at a level that follows you. Eleven levels from 400 to 2500 (Iniciante to Grande mestre) play weaker by searching less deep, picking among Stockfish's top moves with some randomness and, at the bottom, now and then a random move. The automatic level is your rating against AURA (Glicko-1, from the games you play without help), so each game is about even. Stockfish judges every move you make on the spot: a mistake or a *capivarada* turns the screen red until you choose between taking the move back to find a better one and going on to face the punishing reply ("leve", a short flash, and "desligado" are options). After a blunder the computer always plays the punishing move, at any level, unless you switch that off. Start from the initial position, 14 openings, your repertoire, the textbook endgames, the position before one of your own mistakes or a FEN; optional clock (only yours runs), hints (first the piece, then the move), takebacks, draw offers and an evaluation bar. Finished games go to Partidas and are analysed like any other. "Jogar daqui" on the game review and on the analysis board starts a game from the position on screen.
+- **Review and analysis boards**: the board stays in view while the explanation scrolls; more arrows (best move, your move, the opponent's threat and the reply that punishes your move, Stockfish's 2nd and 3rd moves), each one switchable; right-click marks squares red and draws arrows that stay; "Próxima partida" and "Anterior" go through your analysed games.
+- **Linux**: pieces can be dragged with the mouse again (the Qt window reports touch support, which switched the board to its touch-only backend).
+- **Move list**: it scrolls itself to the current move without moving the page (on a phone the page used to jump down to the list at every move).
+
 ## What's new in 0.4.0
 
 - **New interface**: minimalist, light and dark themes (follows the system until you choose), the board as the main element, works on desktop and phone. A welcome tour, a one-line purpose on every screen, a "?" next to every metric and chart, empty states that say what to do next, and an in-app guide ("Como treinar com o AURA").
@@ -86,7 +93,8 @@ The in-app guide (**Como treinar**) is the user manual. In short:
 2. **Partidas**: import your Chess.com games by username (or paste a PGN). Stockfish analyses them in the background and labels each inaccuracy, mistake and *capivarada* (blunder) with an Error DNA category. These games are the main outcome measure, and their headers give your real rating.
 3. **Treinar → Treino em ciclo**: measure (20 mixed puzzles), diagnose your top recurring error, practise 30 exercises built for it, reassess, and record whether the error became rarer (in your games when there are enough).
 4. **Diagnóstico**: the loop, Error DNA, retention, fatigue, pressure, skill profile, prediction (with intervals), what has worked for you, and the science page (validated principles vs experimental features).
-5. Other screens: **Análise** (free board with Stockfish and the coach), **Aberturas** (repertoire drills), **Finais** (textbook endgames against Stockfish), **Plano do dia**.
+5. **Jogar**: play the computer at your level after training. Your mistakes turn the screen red on the spot, and every game is analysed like an imported one.
+6. Other screens: **Análise** (free board with Stockfish and the coach), **Aberturas** (repertoire drills), **Finais** (textbook endgames against Stockfish), **Plano do dia**.
 
 ## Tests
 
@@ -95,7 +103,7 @@ cd backend && .venv/bin/python -m pytest -q          # Windows: .venv\Scripts\py
 cd frontend && npx tsc -b                             # type check
 ```
 
-99 backend tests cover legality, the importer (streaming, validation, incremental updates, the multi-frame file Lichess publishes, resumable download), engine communication (real Stockfish), migrations (a real 0.3.0 database, rollback on failure, a corrupted file, models vs migrations), the desktop launcher (data folder, default and `CHESSLAB_DATA_DIR`; the WebView2 zoom keys; the error dialog), local-only security, the coach (board facts, AI answer validation), Chess.com import, update check, persistence across restarts, the API, and every Cognitive Engine module including a full closed-loop cycle. Tests that need Stockfish are skipped when it is missing.
+110 backend tests cover legality, the importer (streaming, validation, incremental updates, the multi-frame file Lichess publishes, resumable download), engine communication (real Stockfish), migrations (a real 0.3.0 database, rollback on failure, a corrupted file, models vs migrations), the desktop launcher (data folder, default and `CHESSLAB_DATA_DIR`; the WebView2 zoom keys; the error dialog), local-only security, the coach (board facts, AI answer validation), Chess.com import, update check, playing against the computer (levels, the move judge, the level that follows you, saved games), persistence across restarts, the API, and every Cognitive Engine module including a full closed-loop cycle. Tests that need Stockfish are skipped when it is missing.
 
 Browser tests (Playwright): start the server with puzzles imported, then `node frontend/e2e/smoke.mjs http://127.0.0.1:8000 <dir>` (light and dark desktop, explanation, analysis and back, every Diagnóstico tab, every screen, phone layout) and `node frontend/e2e/first_run.mjs <url> <dir>` on an empty database (tour and empty states). Both save screenshots.
 
@@ -116,22 +124,23 @@ backend/app/
   config.py, db.py, models.py      settings, engine/session, SQLAlchemy models
   migrate.py, migrations/          Alembic migrations run on start (0.3.0 baseline, backups, one transaction)
   security.py, i18n.py, version.py
-  services/   engine.py            Stockfish UCI (one instance per role: train / analysis / background)
+  services/   engine.py            Stockfish UCI (one instance per role: train / analysis / background / play)
               importer.py          streaming .csv.zst Lichess importer; import_jobs.py: resumable download
               puzzles.py           indexed selection by equality probes, recent-repeat avoidance, move checking
               trainer.py           exercise orchestration + attempt finalisation (rating, DNA, retention, loop)
               coach.py, tactics.py rule-based "Explicar" from Stockfish facts; coach_ai.py: optional AI + validation
               chesscom.py, game_jobs.py, games.py   Chess.com API import, background analysis queue
               secrets.py, updates.py, prefs.py      API key storage, update check, preferences
+              play.py              Jogar: levels, the computer's move, the move judge, your level against it
               rating.py, adaptive.py, openings.py, endgames.py, plan.py, dashboard.py, explain.py
   cognitive/  profiling.py  error_dna.py  retention.py  interventions.py  loop.py
               attention.py  pressure.py   prediction.py principles.py     stats.py
-  routers/    core.py  cognitive.py (/api/cognitive/*)  extras.py (app, prefs, coach, updates)
+  routers/    core.py  cognitive.py (/api/cognitive/*)  extras.py (app, prefs, coach, updates)  play.py (/api/play/*)
 frontend/src/
   main.tsx                         router (pages load on first visit)
-  components/                      Shell, Board, AnalysisBoard, Explain, Tour, Help, charts, ui
-  lib/                             api, prefs (theme), meta (PT names), sound, trainStore (session), help texts
-  pages/                           Home, Train, Games, Analysis, Openings, Endgames, Plan, Diagnosis, Guide, Settings
+  components/                      Shell, Board, AnalysisBoard, Explain, Tour, Help, BlunderAlarm, ArrowToggles, charts, ui
+  lib/                             api, prefs (theme), meta (PT names), sound, arrows, trainStore and playStore (session), help texts
+  pages/                           Home, Train, Play, Games, Analysis, Openings, Endgames, Plan, Diagnosis, Guide, Settings
 desktop/                           launcher (aura.py), PyInstaller spec, NSIS installer, build scripts
 ```
 

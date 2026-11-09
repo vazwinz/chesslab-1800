@@ -10,6 +10,7 @@ const SECTIONS = [
   ["comeco", "Na primeira semana"],
   ["dia", "Um dia de treino"],
   ["partidas", "Depois de cada partida"],
+  ["jogar", "Jogar contra o computador"],
   ["modos", "Os modos de treino"],
   ["explicar", "O botão Explicar"],
   ["atalhos", "Atalhos de teclado"],
@@ -70,6 +71,17 @@ export default function Guide() {
           </ol>
         </Part>
 
+        <Part id="jogar" title="Jogar contra o computador">
+          <p>Em <Link className="link" to="/jogar">Jogar</Link> você enfrenta o computador num nível que acompanha você: ganhou, o próximo sobe; perdeu, desce. Jogue depois do treino, para levar para a partida o que acabou de praticar.</p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>Cada lance seu é conferido na hora. Um erro ou uma capivarada acende o <b>vermelhão</b>: volte o lance e ache o melhor, ou siga e aguente a resposta. Depois de uma capivarada o computador joga o lance que pune, em qualquer nível.</li>
+            <li>Comece do início, de uma abertura, do seu repertório, de um final, da posição antes de um erro seu ou de um FEN. Na revisão de partidas e na Análise, <b>Jogar daqui</b> começa uma partida da posição na tela.</li>
+            <li>Só contam para o nível as partidas sem dica e sem voltar lance que começam do início, de uma abertura ou do repertório. As outras são treino.</li>
+            <li>Toda partida vai para Partidas e é analisada: os erros entram no Error DNA e no ciclo como os das partidas importadas.</li>
+          </ul>
+          <p>Os níveis são aproximados: é o computador jogando pior de propósito, não o rating de um site.</p>
+        </Part>
+
         <Part id="modos" title="Os modos de treino">
           <dl className="space-y-3">
             <Def term={SESSION_KINDS.loop}>O modo principal. Se não souber o que treinar, é este.</Def>
@@ -98,6 +110,11 @@ export default function Guide() {
             <Keys keys={["←", "→"]}>lance anterior e próximo</Keys>
             <Keys keys={["Home", "End"]}>início e fim</Keys>
             <Keys keys={["F"]}>virar o tabuleiro</Keys>
+          </dl>
+          <h3 className="pt-2">Jogar, com a tela vermelha aberta</h3>
+          <dl className="space-y-1">
+            <Keys keys={["Z"]}>voltar o lance</Keys>
+            <Keys keys={["Esc"]}>seguir a partida</Keys>
           </dl>
         </Part>
 
