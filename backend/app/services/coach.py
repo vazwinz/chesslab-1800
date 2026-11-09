@@ -350,6 +350,9 @@ def build(board: chess.Board, g: Gathered, ctx: dict | None = None) -> dict:
         "sections": {"idea": " ".join(idea), "threat": threat_txt, "themes": themes, "user": user,
                      "line": line, "line_end": end_note, "puzzle_note": puzzle_note},
         "allowed_moves": _allowed_moves(g, line),
+        "mate_numbers": sorted({abs(m) for m in [l["mate"] for l in g.lines]
+                                + [(g.threat or {}).get("mate"), (g.best_threat or {}).get("mate"),
+                                   ((g.user or {}).get("reply") or {}).get("mate")] if m}),
     }
 
 
@@ -375,7 +378,7 @@ def _user_section(board: chess.Board, g: Gathered, bf, best: dict, who: str, thr
     um = chess.Move.from_uci(u["uci"])
     verdict = SEVERITY.get(u["verdict"], u["verdict"])
     if u["is_best"]:
-        return {"verdict": "melhor", "headline": f"{M(u['san'])} é o lance que o Stockfish prefere.",
+        return {"san": u["san"], "verdict": "melhor", "headline": f"{M(u['san'])} é o lance que o Stockfish prefere.",
                 "reasons": [], "eval_best": best["eval"]["text"], "eval_user": u["eval"]["text"], "is_best": True}
     head = (f"{M(u['san'])}: {verdict} segundo o Stockfish. A avaliação vai de {_ev(best['eval'])} "
             f"(com {M(best['san'])}) para {_ev(u['eval'])}.")
@@ -410,7 +413,7 @@ def _user_section(board: chess.Board, g: Gathered, bf, best: dict, who: str, thr
             f"havia mate em {best['mate']}." if best["mate"] and best["mate"] > 0 else ", ".join(bf.tags) + "."))
     if u["verdict"] in ("inaccuracy", "good") and not any("perde" in x for x in reasons):
         reasons.append(f"Seu lance não entrega material de imediato, mas {M(best['san'])} mantém uma avaliação melhor.")
-    return {"verdict": verdict, "verdict_key": u["verdict"], "headline": head, "reasons": reasons,
+    return {"san": u["san"], "verdict": verdict, "verdict_key": u["verdict"], "headline": head, "reasons": reasons,
             "eval_best": best["eval"]["text"], "eval_user": u["eval"]["text"], "win_pct_loss": u["win_pct_loss"],
             "refutation": (r or {}).get("pv_san", [])[:LINE_PLIES], "is_best": False}
 

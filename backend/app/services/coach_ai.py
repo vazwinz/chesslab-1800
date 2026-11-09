@@ -206,6 +206,25 @@ Você recebe FATOS calculados pelo Stockfish e pelo tabuleiro. Regras obrigatór
  "dica": "uma pergunta curta para as próximas partidas, começando com 'Da próxima vez, se pergunte:'"}"""
 
 
+_EVAL_BITS = [  # order matters: numbers first, then the sentences that carried them
+    re.compile(r"\s*\(saldo de material [+\-−]?\d+\)"),
+    re.compile(r"\s*\([+\-−]?\d+\.\d+ contra [+\-−]?\d+\.\d+\)"),
+    re.compile(r"\s*\(#-?\d+\)|#-?\d+"),
+    re.compile(r"\s*\([+\-−]?\d+\.\d+\)|[+\-−]?\d+\.\d+"),
+    re.compile(r"\s*A avaliação vai de [^.]*\."),
+    re.compile(r"\s*Avaliação do Stockfish:[^.]*\."),
+    re.compile(r"\(\s*\)"),
+]
+
+
+def strip_numbers(text: str) -> str:
+    """The AI gets the rule-based sentences without any evaluation number: the app shows
+    Stockfish's numbers itself, and the AI must not repeat (or change) them."""
+    for rx in _EVAL_BITS:
+        text = rx.sub("", text)
+    return re.sub(r"\s{2,}", " ", text).strip()
+
+
 def build_prompt(rules: dict, ctx: dict) -> str:
     sec = rules["sections"]
     lines = rules["engine"]["lines"]
@@ -221,15 +240,17 @@ def build_prompt(rules: dict, ctx: dict) -> str:
         "alternativas": [{"lance": l["san"], "em_relacao_ao_melhor":
                           "quase igual" if best["mate"] is None and l["mate"] is None and best["cp"] - l["cp"] <= 30
                           else "pior"} for l in lines[1:]],
-        "ameaca": sec["threat"],
-        "ideia_por_regras": sec["idea"],
+        "ameaca": strip_numbers(sec["threat"]),
+        "ideia_por_regras": strip_numbers(sec["idea"]),
         "temas": [{"nome": t["name"], "definicao": t["text"]} for t in sec["themes"]],
-        "nota_do_puzzle": sec.get("puzzle_note") or None,
+        "nota_do_puzzle": strip_numbers(sec.get("puzzle_note") or "") or None,
         "lances_permitidos": rules["allowed_moves"],
     }
     u = sec.get("user")
     if u and not u.get("is_best"):
-        facts["lance_do_jogador"] = {"classificacao": u["verdict"], "resumo": u["headline"], "motivos": u["reasons"],
+        facts["lance_do_jogador"] = {"lance": rules["sections"]["user"].get("san"), "classificacao": u["verdict"],
+                                     "resumo": strip_numbers(u["headline"]),
+                                     "motivos": [strip_numbers(x) for x in u["reasons"]],
                                      "linha_depois": u.get("refutation", [])}
     if ctx.get("error_category_label"):
         facts["categoria_do_erro"] = ctx["error_category_label"]
@@ -269,7 +290,8 @@ def validate(answer: dict, rules: dict) -> dict:
     lines = rules["engine"]["lines"]
     best = _norm(lines[0]["san"])
     best_pv_mine = {_norm(s) for s in lines[0]["pv_san"][0::2]}
-    mates = {abs(x) for x in [lines[0].get("mate"), (rules["engine"].get("threat") or {}).get("mate")] if x}
+    mates = {abs(x) for x in rules.get("mate_numbers") or [] if x} | \
+        {abs(x) for x in [lines[0].get("mate"), (rules["engine"].get("threat") or {}).get("mate")] if x}
     user = rules["sections"].get("user") or {}
     for key in ("ideia", "ameaca", "por_que_pior", "dica"):
         if key in answer and not isinstance(answer[key], str):

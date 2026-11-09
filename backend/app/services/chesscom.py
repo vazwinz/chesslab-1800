@@ -22,11 +22,11 @@ def _client():
                         headers={"User-Agent": f"AURA/{__version__} (app de treino de xadrez, uso pessoal)"})
 
 
-def archives(username: str, api: str = API) -> list[str]:
+def archives(username: str, api: str | None = None) -> list[str]:
     if not USERNAME_RE.match(username or ""):
         raise ChessComError("nome de usuário inválido")
     with _client() as c:
-        r = c.get(api.format(user=username.lower()))
+        r = c.get((api or API).format(user=username.lower()))
         if r.status_code == 404:
             raise ChessComError(f"usuário '{username}' não encontrado no Chess.com")
         r.raise_for_status()

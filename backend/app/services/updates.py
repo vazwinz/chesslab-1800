@@ -52,7 +52,7 @@ def _fetch(repo: str) -> dict:
             "published_at": j.get("published_at"), "notes": (j.get("body") or "")[:2000]}
 
 
-def check(db: Session, force: bool = False, fetch=_fetch) -> dict:
+def check(db: Session, force: bool = False, fetch=None) -> dict:
     base = {"current": __version__, "available": False, "repo": settings.update_repo}
     if not settings.update_repo or not prefs.get_prefs(db).get("update_check", True):
         return {**base, "enabled": False}
@@ -66,7 +66,7 @@ def check(db: Session, force: bool = False, fetch=_fetch) -> dict:
         except (KeyError, ValueError):
             pass
     try:
-        res = fetch(settings.update_repo)
+        res = (fetch or _fetch)(settings.update_repo)
     except Exception as exc:  # offline, DNS, TLS, timeout, bad JSON...
         res = {"ok": False, "error": "sem conexão com o GitHub", "exception": type(exc).__name__}
     res = {**res, "checked_at": _now().isoformat(), "for_version": __version__}
