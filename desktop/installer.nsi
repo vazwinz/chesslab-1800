@@ -32,7 +32,7 @@ BrandingText "${APP} ${VERSION}"
 !define MUI_UNICON "aura.ico"
 !define MUI_ABORTWARNING
 !define MUI_WELCOMEPAGE_TITLE "Instalar o AURA ${VERSION}"
-!define MUI_WELCOMEPAGE_TEXT "O AURA é um app de treino de xadrez para chegar aos 1800 no Chess.com.$\r$\n$\r$\nJá usa uma versão anterior? Pode instalar por cima: o seu progresso fica em outra pasta e continua lá. Antes de atualizar o banco de dados, o AURA guarda uma cópia de segurança.$\r$\n$\r$\nClique em Avançar para continuar."
+!define MUI_WELCOMEPAGE_TEXT "O AURA é um app de treino de xadrez para chegar aos 1800 no Chess.com.$\r$\n$\r$\nJá usa uma versão anterior? Pode instalar por cima: o seu progresso fica em outra pasta e continua lá. Antes de atualizar o banco de dados, o AURA guarda uma cópia de segurança.$\r$\n$\r$\nClique em Próximo para continuar."
 !define MUI_FINISHPAGE_RUN "$INSTDIR\AURA.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Abrir o AURA agora"
 
