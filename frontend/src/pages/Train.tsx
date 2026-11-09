@@ -338,7 +338,8 @@ function Session() {
   const severityTone = result ? (result.correct ? "text-good" : "text-bad") : "";
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,400px)]">
-      <div className="min-w-0">
+      {/* the board stays in view while the result and the explanation scroll past it */}
+      <div className="min-w-0 lg:sticky lg:top-6 lg:self-start">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h1 className="text-xl">{sessionTitle}</h1>
           {ex?.loop_phase && <span className="chip border-pen/40 text-pen">ciclo: {LOOP_PHASE[ex.loop_phase] ?? ex.loop_phase}</span>}

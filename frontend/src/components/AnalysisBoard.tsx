@@ -88,7 +88,8 @@ export default function AnalysisBoard({ startFen, initialMoves = [], initialCurs
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-      <div className="min-w-0">
+      {/* the board stays in view while the engine lines and the explanation scroll past it */}
+      <div className="min-w-0 xl:sticky xl:top-6 xl:self-start">
         {header && <div className="mb-3 flex flex-wrap items-center gap-2">{header}</div>}
         <div className="flex items-start gap-2">
           <EvalBar cp={ws.cp} mate={ws.mate} orientation={orientation} height={boardPx} depth={best?.depth} />

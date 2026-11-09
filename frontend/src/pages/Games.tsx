@@ -271,7 +271,8 @@ function Review({ id }: { id: number }) {
         <span className="text-sm text-muted">{dateOnly(g.date)}{g.time_class ? `, ${TIME_CLASS[g.time_class]}` : ""}{g.user_elo ? `, seu rating ${g.user_elo}` : ""}</span>
       </div>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="min-w-0">
+        {/* the board stays in view while the mistakes and the explanation scroll past it */}
+        <div className="min-w-0 xl:sticky xl:top-6 xl:self-start">
           <Board fen={fen} orientation={orientation} interactive={false} lastMove={lastMove} arrows={bestArrow}
             badges={focus && cursor === focus.ply + 1 && !preview ? [{ square: focus.move_uci.slice(2, 4), kind: "bad" }] : []} reserve={170} id="review" />
           <div className="mt-3 flex items-center gap-1">
