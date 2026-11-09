@@ -38,6 +38,41 @@ def test_fixture_import_streams_validates_and_is_incremental(db):
     assert db.execute(select(func.count()).select_from(Puzzle)).scalar() == n
 
 
+def _pzstd_like(csv_bytes: bytes, parts: int = 3) -> bytes:
+    """What pzstd writes (the official Lichess dump is made with it): for each chunk, a skippable
+    frame holding the size of the zstd frame that follows."""
+    import struct
+
+    import zstandard
+
+    lines = csv_bytes.splitlines(keepends=True)
+    step = -(-len(lines) // parts)
+    out = b""
+    for i in range(0, len(lines), step):
+        frame = zstandard.ZstdCompressor(level=3).compress(b"".join(lines[i:i + step]))
+        out += struct.pack("<II", 0x184D2A50, 4) + struct.pack("<I", len(frame)) + frame
+    return out
+
+
+def test_import_reads_the_multi_frame_file_lichess_publishes(db, tmp_path):
+    """The real lichess_db_puzzle.csv.zst starts with a pzstd skippable frame (50 2A 4D 18), not the
+    zstd magic, and holds many frames. 0.4.0 read it as plain CSV and failed at once ("'utf-8' codec
+    can't decode byte 0xa5 in position 9"); every frame must be read, whatever the file is called."""
+    import csv
+    import io
+
+    import zstandard
+
+    plain = zstandard.ZstdDecompressor().decompress(PUZZLE_FIXTURE.read_bytes(), max_output_size=10**7)
+    dump = tmp_path / "lichess_db_puzzle.csv.zst.part"  # a complete download may still have this name
+    dump.write_bytes(_pzstd_like(plain))
+    assert dump.read_bytes()[:4] == b"\x50\x2a\x4d\x18"
+    job = import_puzzles(db, dump)
+    rows = len(list(csv.reader(io.StringIO(plain.decode())))) - 1  # without the header
+    assert job.status == "done" and job.rows_read == rows
+    assert job.inserted >= 40 and job.invalid == 1
+
+
 def test_every_imported_solution_is_legally_executable(puzzles_db):
     for p in puzzles_db.execute(select(Puzzle)).scalars():
         assert validate_puzzle(p.fen, p.moves.split()), p.id

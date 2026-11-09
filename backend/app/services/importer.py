@@ -27,16 +27,23 @@ EXPECTED_HEADER = ["PuzzleId", "FEN", "Moves", "Rating", "RatingDeviation", "Pop
                    "Themes", "GameUrl", "OpeningTags"]
 
 
+def is_zstd(head: bytes) -> bool:
+    """True for a zstd frame, or a skippable frame (magic 0x184D2A50 to 0x184D2A5F) in front of one.
+    The official Lichess dump is written by pzstd: it starts with a skippable frame (50 2A 4D 18),
+    not with the zstd magic, and holds many frames."""
+    return head[:4] == ZSTD_MAGIC or (len(head) >= 4 and head[1:4] == b"\x2a\x4d\x18" and 0x50 <= head[0] <= 0x5F)
+
+
 def open_rows(path: Path) -> Iterator[list[str]]:
     """Yield CSV rows (header included) from a zstd-compressed or plain CSV file. The format is
     detected from the file's first bytes, not its name (a download may still end in .part)."""
     with open(path, "rb") as probe:
-        is_zstd = probe.read(4) == ZSTD_MAGIC
-    if is_zstd:
+        compressed = is_zstd(probe.read(4))
+    if compressed:
         import zstandard
 
         fh = open(path, "rb")
-        reader = zstandard.ZstdDecompressor().stream_reader(fh, read_size=1 << 20)
+        reader = zstandard.ZstdDecompressor().stream_reader(fh, read_size=1 << 20, read_across_frames=True)
         text = io.TextIOWrapper(reader, encoding="utf-8", newline="")
     else:
         fh = None
