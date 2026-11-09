@@ -10,7 +10,7 @@ import chess
 import pytest
 
 from app.services import coach, coach_ai, secrets
-from app.services.engine import get_engine
+from app.services.engine import StockfishService
 
 from .conftest import needs_engine
 
@@ -22,7 +22,12 @@ SCHOLAR = "r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 3 3"   
 
 @pytest.fixture(scope="module")
 def eng():
-    return get_engine("analysis")
+    """A single-threaded engine: these tests check exact moves (the threat Nxe5, a fork), and a
+    multi-threaded Stockfish (the app's analysis engine) may pick another move of similar value
+    from one run to the next. One thread at a fixed depth gives the same answer every time."""
+    svc = StockfishService(threads=1, hash_mb=64, role="analysis")
+    yield svc
+    svc.close()
 
 
 @needs_engine
