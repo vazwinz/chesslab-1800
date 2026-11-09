@@ -136,3 +136,22 @@ def test_failed_migration_changes_nothing(old_db, tmp_path, monkeypatch):
     assert "should_not_exist" not in names and "alembic_version" not in names
     assert "user_elo" not in cols and "Tactical patterns" in titles
     assert _counts(old_db) == before
+
+
+def test_a_corrupted_database_gets_a_portuguese_reason_and_is_left_alone(tmp_path):
+    """The error dialog shows this message: a short Portuguese reason, not SQLAlchemy's SQL dump
+    and documentation link (those stay in aura.log), and the file is not touched."""
+    bad = tmp_path / "chesslab.db"
+    bad.write_bytes(b"isto nao e um banco de dados " * 3000)
+    before = bad.read_bytes()
+    with pytest.raises(migrate.MigrationError) as e:
+        migrate.run_migrations(f"sqlite:///{bad.as_posix()}", backup_dir=tmp_path / "backups")
+    msg = str(e.value)
+    assert "corrompido" in msg and "Nada foi alterado" in msg, msg
+    assert "sqlalche.me" not in msg and "[SQL:" not in msg and "DatabaseError" not in msg, msg
+    assert bad.read_bytes() == before and not (tmp_path / "backups").exists()
+
+
+def test_unknown_errors_keep_only_their_first_line():
+    assert migrate.describe_error(RuntimeError("algo deu errado\n[SQL: SELECT 1]")) == "algo deu errado"
+    assert migrate.describe_error(RuntimeError("")) == "RuntimeError"

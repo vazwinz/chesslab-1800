@@ -234,3 +234,21 @@ def test_pywebview_still_has_the_hook_the_launcher_wraps():
     assert "def on_webview_ready(self, sender, args)" in src
     assert "+= self.on_webview_ready" in src
     assert "AreBrowserAcceleratorKeysEnabled" in src
+
+
+def test_database_error_dialog_names_the_log_and_the_newest_backup(tmp_path):
+    import os
+
+    aura = _load_launcher()
+    data = tmp_path / "dados"
+    (data / "backups").mkdir(parents=True)
+    log = data / "aura.log"
+    msg = aura.db_error_message(RuntimeError("o arquivo está danificado"), data, log)
+    assert "não vai abrir" in msg and "o arquivo está danificado" in msg and str(data) in msg
+    assert msg.endswith(f"Detalhes técnicos: {log}") and "cópias de segurança" not in msg
+    old, new = data / "backups" / "chesslab-copia-da-0.3.0-1.db", data / "backups" / "chesslab-copia-da-0.4.0-2.db"
+    old.write_bytes(b"")
+    new.write_bytes(b"")
+    os.utime(old, (1_000_000, 1_000_000))
+    msg = aura.db_error_message(RuntimeError("x"), data, log)
+    assert f"ficam em {data / 'backups'} (a mais recente: {new.name})" in msg

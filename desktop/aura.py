@@ -115,6 +115,16 @@ def window_background(url: str) -> str:
     return DARK_BG if dark else LIGHT_BG
 
 
+def db_error_message(exc: Exception, data: Path, log_file: Path) -> str:
+    """Text of the dialog shown when the database cannot be prepared (the details are in the log)."""
+    text = f"O AURA não conseguiu preparar o banco de dados e não vai abrir.\n\n{exc}\n\nOs seus dados continuam na pasta {data}."
+    backups = data / "backups"
+    copies = sorted(backups.glob("chesslab-*.db"), key=lambda p: p.stat().st_mtime, reverse=True) if backups.is_dir() else []
+    if copies:
+        text += f"\nAs cópias de segurança do banco ficam em {backups} (a mais recente: {copies[0].name})."
+    return text + f"\nDetalhes técnicos: {log_file}"
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -211,8 +221,7 @@ def main() -> int:
         log.info("database ready: %s", report)
     except Exception as exc:
         log.exception("database preparation failed")
-        message_box("O AURA não conseguiu preparar o banco de dados e não vai abrir.\n\n"
-                    f"{exc}\n\nOs seus dados continuam na pasta {data}.\nDetalhes técnicos: {log_file}")
+        message_box(db_error_message(exc, data, log_file))
         return 1
 
     import uvicorn

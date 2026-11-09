@@ -35,6 +35,30 @@ class MigrationError(RuntimeError):
     pass
 
 
+# SQLite failures a person can act on, said in Portuguese (the full error still goes to aura.log)
+_DB_ERRORS = (
+    ("file is not a database", "o arquivo chesslab.db está corrompido ou não é um banco de dados do AURA"),
+    ("database disk image is malformed", "o arquivo chesslab.db está danificado"),
+    ("database is locked", "o banco de dados está em uso por outro programa"),
+    ("unable to open database file", "não foi possível abrir o arquivo do banco de dados (pasta ou permissão)"),
+    ("disk i/o error", "erro de leitura ou gravação no disco"),
+    ("database or disk is full", "o disco está cheio"),
+    ("readonly database", "o arquivo do banco de dados está como somente leitura"),
+)
+
+
+def describe_error(exc: BaseException) -> str:
+    """One short line for the error dialog: a Portuguese reason for the usual SQLite failures,
+    otherwise the first line of the error, without SQLAlchemy's SQL dump and documentation link."""
+    orig = getattr(exc, "orig", None) or exc  # SQLAlchemy wraps the sqlite3 error
+    text = str(orig).strip()
+    low = text.lower()
+    for needle, reason in _DB_ERRORS:
+        if needle in low:
+            return reason
+    return (text.splitlines()[0] if text else type(orig).__name__)[:300]
+
+
 def alembic_config() -> Config:
     cfg = Config()
     cfg.set_main_option("script_location", str(MIGRATIONS_DIR))
@@ -162,6 +186,7 @@ def run_migrations(url: str, backup_dir: Path | None = None, label: str = "antes
         return report
     except Exception as exc:
         log.exception("database migration failed")
-        raise MigrationError(f"Não foi possível atualizar o banco de dados ({exc}). Nada foi alterado.") from exc
+        raise MigrationError(f"Não foi possível atualizar o banco de dados: {describe_error(exc)}. "
+                             "Nada foi alterado.") from exc
     finally:
         mig.dispose()
