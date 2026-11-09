@@ -1,4 +1,4 @@
-"""Base ChessLab API: engine, puzzles, training sessions/attempts, games, plan, openings, endgames, dashboard."""
+"""Base ChessLab API: engine, puzzles, training sessions/attempts, games, the daily routine, openings, endgames, dashboard."""
 from __future__ import annotations
 
 from typing import Literal
@@ -14,7 +14,7 @@ from ..config import settings
 from ..db import get_db
 from ..timeutil import iso
 from ..models import Attempt, EngineCache, Game, Puzzle, Repertoire, RepertoireLine, TrainingSession, utcnow
-from ..services import dashboard, endgames, openings, plan, prefs, puzzles, trainer
+from ..services import dashboard, endgames, openings, prefs, puzzles, routine, trainer
 from ..services.engine import EngineUnavailable, get_engine
 from ..services import game_jobs
 from ..services.games import analyze_game, import_pgn, set_user_color
@@ -380,52 +380,24 @@ def games_detail(gid: int, db: Session = Depends(get_db)):
                          for m in ms]}
 
 
-# ---------------------------------------------------------------- daily plan
-@router.get("/plan/today")
-def plan_today(db: Session = Depends(get_db)):
-    return plan.today(db)
+# ---------------------------------------------------------------- today's routine
+@router.get("/routine/today")
+def routine_today(db: Session = Depends(get_db)):
+    return routine.today(db)
 
 
-class PlanRegenIn(BaseModel):
+class LightIn(BaseModel):
     light: bool
 
 
-@router.post("/plan/today/regenerate")
-def plan_regen(body: PlanRegenIn, db: Session = Depends(get_db)):
-    return plan.regenerate(db, body.light)
+@router.post("/routine/today/light")
+def routine_light(body: LightIn, db: Session = Depends(get_db)):
+    return routine.set_light(db, body.light)
 
 
-class CompleteIn(BaseModel):
-    completed: bool = True
-
-
-@router.post("/plan/blocks/{bid}")
-def plan_complete(bid: int, body: CompleteIn, db: Session = Depends(get_db)):
-    try:
-        return plan.complete(db, bid, body.completed)
-    except KeyError:
-        raise HTTPException(404)
-
-
-class PlanBlockIn(BaseModel):
-    key: str
-    title: str
-    minutes: int = Field(..., ge=0, le=600)
-
-
-@router.get("/plan/config")
-def plan_config(db: Session = Depends(get_db)):
-    return plan.get_config(db)
-
-
-@router.put("/plan/config")
-def plan_config_set(blocks: list[PlanBlockIn], db: Session = Depends(get_db)):
-    return plan.set_config(db, [b.model_dump() for b in blocks])
-
-
-@router.get("/plan/consistency")
-def plan_consistency(db: Session = Depends(get_db)):
-    return plan.consistency(db)
+@router.get("/routine/consistency")
+def routine_consistency(db: Session = Depends(get_db)):
+    return routine.consistency(db)
 
 
 # ---------------------------------------------------------------- openings

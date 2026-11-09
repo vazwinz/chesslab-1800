@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 import random
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import chess
 import chess.pgn
@@ -30,6 +30,7 @@ LEVELS = [(400, "Iniciante"), (600, "Aprendiz"), (800, "Novato"), (1000, "Clube"
           (1400, "Experiente"), (1600, "Forte"), (1800, "Avançado"), (2000, "Expert"), (2200, "Mestre"),
           (2500, "Grande mestre")]
 KEY = "play_rating"
+LOG_KEY, LOG_MAX = "play_log", 400
 BOT_RD = 60.0        # the levels are approximate, so a bot's rating is not exact either
 START_RD = 300.0
 HISTORY = 60
@@ -173,6 +174,26 @@ def record(db: Session, level: float, score: float, game_id: int | None) -> dict
     db.commit()
     return {"rating_before": round(before, 1), "rating_after": st["rating"],
             "next_level": suggested_level(st["rating"]), "next_level_name": level_name(suggested_level(st["rating"]))}
+
+
+def log_game(db: Session, game_id: int | None, practice: bool, helped: bool, plies: int, score: float) -> None:
+    """Every finished game, rated or not (the routine counts today's games from it)."""
+    kv = db.get(KV, LOG_KEY)
+    log = list(kv.value) if kv and isinstance(kv.value, list) else []
+    log = (log + [{"day": date.today().isoformat(), "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                   "game_id": game_id, "practice": practice, "helped": helped, "plies": plies, "score": score}])[-LOG_MAX:]
+    if kv is None:
+        db.add(KV(key=LOG_KEY, value=log))
+    else:
+        kv.value = log
+    db.commit()
+
+
+def games_on(db: Session, day: date) -> int:
+    """Games played on that (local) day that count for the routine: from an even start, two plies or more."""
+    kv = db.get(KV, LOG_KEY)
+    log = kv.value if kv and isinstance(kv.value, list) else []
+    return sum(1 for g in log if g.get("day") == day.isoformat() and not g.get("practice") and g.get("plies", 0) >= 2)
 
 
 # ------------------------------------------------------------------ where a game can start

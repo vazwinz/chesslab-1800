@@ -203,15 +203,10 @@ def test_dashboard_empty_has_no_fabricated_numbers(client):
     assert d["rating"]["series"] == []
 
 
-def test_plan_and_openings(client):
-    p = client.get("/api/plan/today").json()
-    assert sum(b["minutes"] for b in p["blocks"]) == 180
-    bid = p["blocks"][0]["id"]
-    p2 = client.post(f"/api/plan/blocks/{bid}", json={"completed": True}).json()
-    assert p2["blocks"][0]["completed"]
-    assert client.get("/api/plan/consistency").json()["streak_days"] == 1
-    light = client.post("/api/plan/today/regenerate", json={"light": True}).json()
-    assert light["blocks"]  # completed block is kept, nothing silently deleted
+def test_routine_and_openings(client):
+    r = client.get("/api/routine/today").json()
+    assert [s["key"] for s in r["steps"]] == ["games"]  # an empty database: only the games against AURA
+    assert client.get("/api/routine/consistency").json()["streak_days"] == 0
     rid = client.post("/api/openings", json={"name": "Italian", "color": "white"}).json()["id"]
     line = client.post(f"/api/openings/{rid}/lines", json={"name": "Main", "moves": "1. e4 e5 2. Nf3 Nc6 3. Bc4"}).json()
     assert line["moves_san"] == ["e4", "e5", "Nf3", "Nc6", "Bc4"]

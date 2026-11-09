@@ -79,7 +79,7 @@ A break is suggested when, with ≥16 attempts in the session:
 - **and** both halves of that window are below the early level (consistent, not one streak),
 - **and** decisions became ≥25% slower, or hesitation rose by ≥1 event per attempt, or the session has lasted ≥100 min.
 
-Two flagged sessions in 3 days, or a 3-day residual ≤ −0.15 over ≥30 attempts, make the daily plan offer a lighter day. This is a performance signal, not a diagnosis.
+Two flagged sessions in 3 days, or a 3-day residual ≤ −0.15 over ≥30 attempts, make today's routine offer a lighter day. This is a performance signal, not a diagnosis.
 
 ## 7. Pressure simulation (`pressure.py`)
 

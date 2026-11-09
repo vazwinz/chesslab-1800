@@ -3,28 +3,29 @@ import { Link } from "react-router-dom";
 import { Bar as RBar, BarChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartTip, NumbersTable } from "../components/charts";
 import Help from "../components/Help";
+import RoutinePanel from "../components/RoutinePanel";
 import { Bar, Empty, ErrorNote, Metric, PageHeader, Spinner } from "../components/ui";
 import { api } from "../lib/api";
 import { dateTime, dayShort, num, pct, secs } from "../lib/format";
 import { SESSION_KINDS, TIME_CLASS, useMeta } from "../lib/meta";
 import { usePrefs } from "../lib/prefs";
+import { useRoutine } from "../lib/routine";
 import { useColors } from "../lib/useColors";
 
 export default function Home() {
   const [d, setD] = useState<any>(null);
   const [setup, setSetup] = useState<any>(null);
   const [loop, setLoop] = useState<any>(null);
-  const [plan, setPlan] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const meta = useMeta();
   const c = useColors();
   const { prefs } = usePrefs();
+  const { routine, setRoutine } = useRoutine();
 
   useEffect(() => {
     api.get("/api/dashboard").then(setD).catch((e) => setErr(e.message));
     api.get("/api/setup").then(setSetup).catch(() => {});
     api.get("/api/cognitive/loop").then(setLoop).catch(() => {});
-    api.get("/api/plan/today").then(setPlan).catch(() => {});
   }, []);
 
   if (err) return <ErrorNote>{err}</ErrorNote>;
@@ -32,12 +33,11 @@ export default function Home() {
   const noPuzzles = setup && setup.puzzles === 0;
   const rr = d.real_rating;
   const main = rr?.main;
-  const today = d.daily_minutes[d.daily_minutes.length - 1]?.minutes ?? 0;
   const phase = loop?.phase;
 
   return (
     <div>
-      <PageHeader title="Início" purpose="O seu ponto de partida: onde você está em relação à meta, o que fazer hoje e como o treino está indo." />
+      <PageHeader title="Início" purpose="O seu ponto de partida: a rotina de hoje, onde você está em relação à meta e como o treino está indo." />
 
       {(noPuzzles || !d.games.length) && (
         <section className="mb-8">
@@ -56,7 +56,9 @@ export default function Home() {
         </section>
       )}
 
-      <section className="mb-10 grid gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+      {routine && <div className="mb-10"><RoutinePanel r={routine} onChange={setRoutine} /></div>}
+
+      <section className="mb-10">
         <div>
           <div className="flex items-center gap-2">
             <h2>Meta: {num(rr.goal)} no Chess.com</h2>
@@ -100,39 +102,6 @@ export default function Home() {
                   ? "As partidas importadas não trazem o rating dos jogadores no cabeçalho do PGN. Importe pelo seu usuário do Chess.com: essas partidas trazem, e o rating aparece aqui com a distância até a meta."
                   : "O AURA lê o seu rating no cabeçalho das partidas importadas. Importe pelo seu usuário do Chess.com e ele aparece aqui, com a distância até a meta."}
               </Empty>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-5">
-          <div>
-            <h2 className="mb-2">Hoje</h2>
-            <div className="panel p-5">
-              <p className="font-bold">{phase === "practice" ? "Continue a prática do ciclo" : phase === "reassess" ? "Faça a reavaliação do ciclo" : "Treino em ciclo"}</p>
-              <p className="mt-1 text-sm text-muted">
-                {phase === "measure" && `Medição: ${loop.baseline.attempts ?? 0} de ${loop.baseline.needed} puzzles.`}
-                {phase === "practice" && loop.assignment && `${meta.intervention(loop.assignment.intervention)} para ${meta.dna(loop.assignment.category)}: ${loop.assignment.done} de ${loop.assignment.target}.`}
-                {phase === "reassess" && `Reavaliação: ${loop.reassessment.done ?? 0} de ${loop.reassessment.needed} puzzles.`}
-                {phase === "diagnose" && "Esperando erros suficientes para o diagnóstico."}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Link className="btn-primary" to="/treinar?modo=loop">{(loop?.baseline?.attempts ?? 0) > 0 || (phase && phase !== "measure") ? "Continuar o ciclo" : "Começar o ciclo"}</Link>
-                <Link className="btn" to="/treinar?modo=mixed">Puzzles mistos</Link>
-              </div>
-              <p className="mt-3 text-sm text-faint">{today ? `${String(today).replace(".", ",")} min de treino hoje` : "Nenhum exercício hoje ainda"}</p>
-            </div>
-          </div>
-          {plan && (
-            <div>
-              <div className="mb-2 flex items-center justify-between"><h2>Plano do dia</h2><Link className="link text-sm" to="/plano">Abrir</Link></div>
-              <ul className="space-y-1.5 text-sm">
-                {plan.blocks.map((b: any) => (
-                  <li key={b.id} className="flex justify-between gap-2">
-                    <span className={b.completed ? "text-faint line-through" : ""}>{b.title}</span>
-                    <span className="tnum text-muted">{b.minutes} min</span>
-                  </li>
-                ))}
-              </ul>
             </div>
           )}
         </div>

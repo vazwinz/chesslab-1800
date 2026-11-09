@@ -448,7 +448,7 @@ function FatigueTab() {
             <p className="mt-1 text-sm text-muted">
               Pausas sugeridas nos últimos 3 dias: {num(ld.break_flags_3d)}. Resultado desses dias: {ld.n_3d ? `${points(ld.residual_3d)} (${num(ld.n_3d)} exercícios)` : "sem exercícios"}.
             </p>
-            {ld.light_day && <Link className="btn mt-3" to="/plano">Abrir o plano do dia</Link>}
+            {ld.light_day && <Link className="btn mt-3" to="/rotina">Abrir a rotina do dia</Link>}
           </Section>
         </>
       );

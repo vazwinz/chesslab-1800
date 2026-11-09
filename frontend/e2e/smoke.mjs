@@ -114,7 +114,7 @@ try {
       check(!(await page.getByRole("alert").count()), `${theme}: Diagnóstico › ${label} sem erro`);
       if (theme === "light" || ["fadiga", "erros"].includes(tab)) await shot(page, `${theme}-diagnostico-${tab}`, true);
     }
-    for (const [path, name] of [["/jogar", "jogar"], ["/plano", "plano"], ["/aberturas", "aberturas"], ["/finais", "finais"], ["/guia", "guia"], ["/configuracoes", "configuracoes"]]) {
+    for (const [path, name] of [["/jogar", "jogar"], ["/rotina", "rotina"], ["/aberturas", "aberturas"], ["/finais", "finais"], ["/guia", "guia"], ["/configuracoes", "configuracoes"]]) {
       await page.goto(`${BASE}${path}`);
       await page.waitForTimeout(700);
       check(!(await page.getByRole("alert").count()), `${theme}: ${path} sem erro`);

@@ -16,6 +16,7 @@ The whole interface is in Brazilian Portuguese. These developer docs stay in Eng
 
 ## Since 0.4.0 (next version)
 
+- **Today's routine** replaces the "Plano do dia" (about 3 h of blocks ticked by hand). Início opens with a short list of concrete steps, in order, that the app counts by itself: up to 5 positions from your own game mistakes (the newest first), 15 puzzles of the training loop, spaced review when something is due, endgame puzzles or your repertoire on alternate days, and 3 games against AURA at the end. A step that cannot be done that day is left out; the steps of a day are fixed when it is first planned, and a light day (offered when fatigue shows) shortens them and leaves 1 game. When a step is done, the training screen says so and links to the next one. The mistakes of today's games come back as the first step tomorrow. About 70 minutes a day.
 - **Jogar**: a game against the computer at a level that follows you. Eleven levels from 400 to 2500 (Iniciante to Grande mestre) play weaker by searching less deep, picking among Stockfish's top moves with some randomness and, at the bottom, now and then a random move. The automatic level is your rating against AURA (Glicko-1, from the games you play without help), so each game is about even. Stockfish judges every move you make on the spot: a mistake or a *capivarada* turns the whole screen red for about a second, with just the word on it. It does not stop the game, explain anything or offer a way back: there is no takeback, and the better move is shown only when the game is over (a red frame, "Só a borda", and "Desligado" are options). After a blunder the computer always plays the punishing move, at any level, unless you switch that off. Start from the initial position, 14 openings, your repertoire, the textbook endgames, the position before one of your own mistakes or a FEN; optional clock (only yours runs), hints (first the piece, then the move), draw offers and an evaluation bar. Finished games go to Partidas and are analysed like any other. "Jogar daqui" on the game review and on the analysis board starts a game from the position on screen.
 - **Review and analysis boards**: the board stays in view while the explanation scrolls; more arrows (best move, your move, the opponent's threat and the reply that punishes your move, Stockfish's 2nd and 3rd moves), each one switchable; right-click marks squares red and draws arrows that stay; "Próxima partida" and "Anterior" go through your analysed games.
 - **Linux**: pieces can be dragged with the mouse again (the Qt window reports touch support, which switched the board to its touch-only backend).
@@ -92,10 +93,10 @@ The in-app guide (**Como treinar**) is the user manual. In short:
 
 1. **Configurações → Puzzles**: download the Lichess puzzles once.
 2. **Partidas**: import your Chess.com games by username (or paste a PGN). Stockfish analyses them in the background and labels each inaccuracy, mistake and *capivarada* (blunder) with an Error DNA category. These games are the main outcome measure, and their headers give your real rating.
-3. **Treinar → Treino em ciclo**: measure (20 mixed puzzles), diagnose your top recurring error, practise 30 exercises built for it, reassess, and record whether the error became rarer (in your games when there are enough).
+3. **Every day, Início → Rotina de hoje**: follow the button. The routine strings the training loop, your own mistakes, review and endgames or openings together and ends with 3 games against AURA. The loop itself measures (20 mixed puzzles), diagnoses your top recurring error, practises 30 exercises built for it, reassesses, and records whether the error became rarer (in your games when there are enough).
 4. **Diagnóstico**: the loop, Error DNA, retention, fatigue, pressure, skill profile, prediction (with intervals), what has worked for you, and the science page (validated principles vs experimental features).
-5. **Jogar**: play the computer at your level after training. Your mistakes turn the screen red on the spot, and every game is analysed like an imported one.
-6. Other screens: **Análise** (free board with Stockfish and the coach), **Aberturas** (repertoire drills), **Finais** (textbook endgames against Stockfish), **Plano do dia**.
+5. **Jogar**: play the computer at your level, the routine's last step. Your mistakes turn the screen red on the spot, and every game is analysed like an imported one.
+6. Other screens: **Análise** (free board with Stockfish and the coach), **Aberturas** (repertoire drills), **Finais** (textbook endgames against Stockfish), **Rotina do dia** (today's routine, the light day and the calendar of days trained).
 
 ## Tests
 
@@ -104,7 +105,7 @@ cd backend && .venv/bin/python -m pytest -q          # Windows: .venv\Scripts\py
 cd frontend && npx tsc -b                             # type check
 ```
 
-110 backend tests cover legality, the importer (streaming, validation, incremental updates, the multi-frame file Lichess publishes, resumable download), engine communication (real Stockfish), migrations (a real 0.3.0 database, rollback on failure, a corrupted file, models vs migrations), the desktop launcher (data folder, default and `CHESSLAB_DATA_DIR`; the WebView2 zoom keys; the error dialog), local-only security, the coach (board facts, AI answer validation), Chess.com import, update check, playing against the computer (levels, the move judge, the level that follows you, saved games), persistence across restarts, the API, and every Cognitive Engine module including a full closed-loop cycle. Tests that need Stockfish are skipped when it is missing.
+116 backend tests cover legality, the importer (streaming, validation, incremental updates, the multi-frame file Lichess publishes, resumable download), engine communication (real Stockfish), migrations (a real 0.3.0 database, rollback on failure, a corrupted file, models vs migrations), the desktop launcher (data folder, default and `CHESSLAB_DATA_DIR`; the WebView2 zoom keys; the error dialog), local-only security, the coach (board facts, AI answer validation), Chess.com import, update check, playing against the computer (levels, the move judge, the level that follows you, saved games), today's routine (which steps, counting, the light day, days planned by 0.4.0), persistence across restarts, the API, and every Cognitive Engine module including a full closed-loop cycle. Tests that need Stockfish are skipped when it is missing.
 
 Browser tests (Playwright): start the server with puzzles imported, then `node frontend/e2e/smoke.mjs http://127.0.0.1:8000 <dir>` (light and dark desktop, explanation, analysis and back, every Diagnóstico tab, every screen, phone layout) and `node frontend/e2e/first_run.mjs <url> <dir>` on an empty database (tour and empty states). Both save screenshots.
 
@@ -133,15 +134,16 @@ backend/app/
               chesscom.py, game_jobs.py, games.py   Chess.com API import, background analysis queue
               secrets.py, updates.py, prefs.py      API key storage, update check, preferences
               play.py              Jogar: levels, the computer's move, the move judge, your level against it
-              rating.py, adaptive.py, openings.py, endgames.py, plan.py, dashboard.py, explain.py
+              routine.py           today's routine: the steps, counted from attempts, drills and games
+              rating.py, adaptive.py, openings.py, endgames.py, dashboard.py, explain.py
   cognitive/  profiling.py  error_dna.py  retention.py  interventions.py  loop.py
               attention.py  pressure.py   prediction.py principles.py     stats.py
   routers/    core.py  cognitive.py (/api/cognitive/*)  extras.py (app, prefs, coach, updates)  play.py (/api/play/*)
 frontend/src/
   main.tsx                         router (pages load on first visit)
-  components/                      Shell, Board, AnalysisBoard, Explain, Tour, Help, BlunderAlarm, ArrowToggles, charts, ui
-  lib/                             api, prefs (theme), meta (PT names), sound, arrows, trainStore and playStore (session), help texts
-  pages/                           Home, Train, Play, Games, Analysis, Openings, Endgames, Plan, Diagnosis, Guide, Settings
+  components/                      Shell, Board, AnalysisBoard, Explain, Tour, Help, RoutinePanel, BlunderAlarm, ArrowToggles, charts, ui
+  lib/                             api, prefs (theme), meta (PT names), sound, arrows, routine, trainStore and playStore (session), help texts
+  pages/                           Home, Train, Play, Games, Analysis, Openings, Endgames, Routine, Diagnosis, Guide, Settings
 desktop/                           launcher (aura.py), PyInstaller spec, NSIS installer, build scripts
 ```
 

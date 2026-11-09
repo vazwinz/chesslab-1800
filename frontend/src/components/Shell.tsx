@@ -14,7 +14,7 @@ const NAV: { to: string; label: string; icon: string; group: number }[] = [
   { to: "/analise", label: "Análise", icon: "analysis", group: 0 },
   { to: "/aberturas", label: "Aberturas", icon: "book", group: 1 },
   { to: "/finais", label: "Finais", icon: "king", group: 1 },
-  { to: "/plano", label: "Plano do dia", icon: "plan", group: 1 },
+  { to: "/rotina", label: "Rotina do dia", icon: "plan", group: 1 },
   { to: "/diagnostico", label: "Diagnóstico", icon: "chart", group: 2 },
   { to: "/guia", label: "Como treinar", icon: "guide", group: 3 },
   { to: "/configuracoes", label: "Configurações", icon: "settings", group: 3 },

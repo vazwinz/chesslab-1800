@@ -109,6 +109,7 @@ def play_finish(body: FinishIn, db: Session = Depends(get_db)):
     # (an endgame, one of your mistakes, a pasted FEN) or one that never really started does not
     # move your level
     rated = not body.helped and not body.practice and len(body.moves) >= 2
+    play.log_game(db, gid, body.practice, body.helped, len(body.moves), score)
     out = {"game_id": gid, "rated": rated, "score": score}
     if rated:
         out.update(play.record(db, body.level, score, gid))

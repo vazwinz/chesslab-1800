@@ -1,5 +1,5 @@
 """Dashboard statistics, computed with SQL aggregates over the stored attempts, ratings, games
-and plan rows (nothing is estimated). Days are calendar days in this computer's time zone."""
+and the routine's daily rows (nothing is estimated). Days are calendar days in this computer's time zone."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -12,7 +12,7 @@ from ..cognitive.stats import wilson
 from ..models import Attempt, Game, RatingPoint, TrainingSession
 from ..timeutil import iso, local_date
 from . import adaptive, prefs
-from .plan import consistency
+from .routine import consistency
 from .rating import current_rating
 
 MIN_THEME_N = 5

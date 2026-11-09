@@ -45,21 +45,21 @@ export default function Guide() {
             <li><Link className="link" to="/configuracoes">Baixe os puzzles do Lichess</Link>. Uma vez só: uns 300 MB e cerca de 15 minutos de importação.</li>
             <li><Link className="link" to="/partidas">Importe as suas partidas</Link> do Chess.com pelo seu usuário. A análise com o Stockfish roda em segundo plano, então dá para treinar enquanto isso.</li>
             <li><Link className="link" to="/treinar?modo=loop">Comece o ciclo</Link>. Os 20 primeiros puzzles são a medição: jogue no seu ritmo normal, sem pressa e sem chutar.</li>
-            <li>Nos dias seguintes, continue o ciclo e siga o <Link className="link" to="/plano">plano do dia</Link>. Depois de uns dias, abra o <Link className="link" to="/diagnostico">Diagnóstico</Link>.</li>
+            <li>Nos dias seguintes, abra o app e siga a <Link className="link" to="/rotina">rotina do dia</Link>, que aparece na tela inicial. Depois de uns dias, abra o <Link className="link" to="/diagnostico">Diagnóstico</Link>.</li>
           </ol>
         </Part>
 
         <Part id="dia" title="Um dia de treino">
-          <p>O <Link className="link" to="/plano">plano do dia</Link> divide o treino em blocos. Cada bloco tem um lugar no app:</p>
+          <p>Abra o app: a <Link className="link" to="/rotina">rotina de hoje</Link> está na tela inicial, na ordem certa, e o próprio app conta o que você fez. Não precisa marcar nada: siga o botão.</p>
           <dl className="space-y-2">
-            <Def term="Padrões táticos">Treinar, no ciclo ou em puzzles mistos.</Def>
-            <Def term="Cálculo profundo">Treinar, no cálculo às cegas: a linha inteira na cabeça antes de mexer.</Def>
-            <Def term="Finais">A tela Finais (teoria contra o Stockfish) e os puzzles de final.</Def>
-            <Def term="Preparação de aberturas">A tela Aberturas: treine as linhas do seu repertório de memória.</Def>
-            <Def term="Partidas sérias">No Chess.com, com tempo para pensar em cada lance.</Def>
-            <Def term="Análise dos erros">Partidas: revise os erros da última partida com o botão Explicar.</Def>
+            <Def term="Seus erros de partida">Até 5 posições em que você errou nas suas partidas, as mais recentes primeiro: as partidas de ontem viram o aquecimento de hoje.</Def>
+            <Def term="Treino em ciclo">15 puzzles do ciclo, que mede você, acha o erro que mais se repete e treina exatamente ele.</Def>
+            <Def term="Revisão espaçada">Só nos dias em que há temas na hora de rever.</Def>
+            <Def term="Finais ou repertório">Um em cada dia: puzzles de final ou as linhas do seu repertório.</Def>
+            <Def term="3 partidas contra o AURA">No fim, no seu nível e sem voltar lance. Os erros delas abrem a rotina de amanhã.</Def>
           </dl>
-          <p>Os minutos de cada bloco são ajustáveis. Quando o app perceber quedas de desempenho repetidas, ele sugere um dia leve: menos tempo, mesmo foco.</p>
+          <p>O passo que não dá para fazer fica de fora (sem partidas analisadas, sem puzzles baixados, nada para rever). Quando as últimas sessões mostram cansaço, o app sugere o dia leve: menos puzzles e 1 partida.</p>
+          <p>As suas partidas no Chess.com continuam sendo a medida principal do progresso: importe depois de jogar.</p>
         </Part>
 
         <Part id="partidas" title="Depois de cada partida">

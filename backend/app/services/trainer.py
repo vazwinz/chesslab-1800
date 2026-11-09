@@ -108,17 +108,23 @@ def _retention_exercise(db: Session, sess: TrainingSession) -> dict | None:
     return None
 
 
-def _own_mistake(db: Session, sess: TrainingSession, mode: str, **kw) -> dict | None:
+def own_mistake_pool(db: Session, category: str | None = None) -> list[GameMistake]:
+    """Mistakes and blunders from your analysed games that were not shown in the last 3 days."""
     recent = {gid for gid in db.execute(select(Attempt.game_mistake_id).where(
         Attempt.game_mistake_id.is_not(None), Attempt.served_at >= utcnow() - timedelta(days=3))).scalars()}
     q = select(GameMistake).where(GameMistake.severity.in_(("mistake", "blunder")))
-    cat = kw.pop("category", None)
-    if cat:
-        q = q.where(GameMistake.category == cat)
-    rows = [m for m in db.execute(q.order_by(GameMistake.id.desc()).limit(300)).scalars() if m.id not in recent]
+    if category:
+        q = q.where(GameMistake.category == category)
+    return [m for m in db.execute(q.order_by(GameMistake.id.desc()).limit(300)).scalars() if m.id not in recent]
+
+
+def _own_mistake(db: Session, sess: TrainingSession, mode: str, **kw) -> dict | None:
+    rows = own_mistake_pool(db, kw.pop("category", None))
     if not rows:
         return None
-    gm = random.choice(rows)
+    # the mistakes of the last two days first: yesterday's games are today's warm-up
+    fresh = [m for m in rows if m.created_at and m.created_at >= utcnow() - timedelta(days=2)]
+    gm = random.choice(fresh or rows)
     a = _new_attempt(db, sess, mode, gm=gm, **kw)
     return _payload(a, gm=gm)
 

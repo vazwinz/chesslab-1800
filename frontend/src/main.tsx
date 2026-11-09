@@ -15,7 +15,7 @@ const Play = lazy(() => import("./pages/Play"));
 const Analysis = lazy(() => import("./pages/Analysis"));
 const Openings = lazy(() => import("./pages/Openings"));
 const Endgames = lazy(() => import("./pages/Endgames"));
-const Plan = lazy(() => import("./pages/Plan"));
+const Routine = lazy(() => import("./pages/Routine"));
 const Diagnosis = lazy(() => import("./pages/Diagnosis"));
 const Guide = lazy(() => import("./pages/Guide"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -75,7 +75,8 @@ function Pages() {
           <Route path="/analise" element={<Analysis />} />
           <Route path="/aberturas" element={<Openings />} />
           <Route path="/finais" element={<Endgames />} />
-          <Route path="/plano" element={<Plan />} />
+          <Route path="/rotina" element={<Routine />} />
+          <Route path="/plano" element={<Navigate to="/rotina" replace />} />
           <Route path="/diagnostico" element={<Diagnosis />} />
           <Route path="/guia" element={<Guide />} />
           <Route path="/configuracoes" element={<Settings />} />
@@ -85,7 +86,7 @@ function Pages() {
           <Route path="/analysis" element={<Navigate to="/analise" replace />} />
           <Route path="/openings" element={<Navigate to="/aberturas" replace />} />
           <Route path="/endgames" element={<Navigate to="/finais" replace />} />
-          <Route path="/plan" element={<Navigate to="/plano" replace />} />
+          <Route path="/plan" element={<Navigate to="/rotina" replace />} />
           <Route path="/cognitive" element={<Navigate to="/diagnostico" replace />} />
           <Route path="/setup" element={<Navigate to="/configuracoes" replace />} />
           <Route path="*" element={<NotFound />} />

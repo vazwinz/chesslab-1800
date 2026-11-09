@@ -14,6 +14,7 @@ import { dateOnly } from "../lib/format";
 import { useMeta } from "../lib/meta";
 import { Judgment, PlayGame, PlayResult, usePlay } from "../lib/playStore";
 import { usePrefs } from "../lib/prefs";
+import { RoutineDay, stepFor, useRoutine } from "../lib/routine";
 import { moveSound, play } from "../lib/sound";
 
 type Level = { elo: number; name: string };
@@ -69,9 +70,11 @@ export default function Play() {
   const [starts, setStarts] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  const { routine, reload: reloadRoutine } = useRoutine();
   const reloadState = useCallback(() => {
     api.get("/api/play/state").then(setSt).catch((e) => setErr(e.message));
-  }, []);
+    void reloadRoutine();
+  }, [reloadRoutine]);
   useEffect(() => {
     reloadState();
     api.get("/api/play/starts").then(setStarts).catch(() => setStarts({ openings: [], repertoire: [], endgames: [], mistakes: [] }));
@@ -136,9 +139,9 @@ export default function Play() {
         </div>
       )}
       {game ? (
-        <GameView key={game.id} levels={levels} onAgain={begin} onNew={() => setGame(null)} refreshState={reloadState} />
+        <GameView key={game.id} levels={levels} onAgain={begin} onNew={() => setGame(null)} refreshState={reloadState} routine={routine} />
       ) : (
-        <Setup st={st} starts={starts} levels={levels} onStart={begin} initial={urlStart} />
+        <Setup st={st} starts={starts} levels={levels} onStart={begin} initial={urlStart} routine={routine} />
       )}
     </div>
   );
@@ -176,8 +179,8 @@ function Check({ checked, onChange, children }: { checked: boolean; onChange: (v
   );
 }
 
-function Setup({ st, starts, levels, onStart, initial }: { st: any; starts: any; levels: Level[];
-  onStart: (s: StartChoice) => void; initial: StartChoice | null }) {
+function Setup({ st, starts, levels, onStart, initial, routine }: { st: any; starts: any; levels: Level[];
+  onStart: (s: StartChoice) => void; initial: StartChoice | null; routine: RoutineDay | null }) {
   const { prefs, set } = usePrefs();
   const meta = useMeta();
   const [kind, setKind] = useState<StartKind>(initial ? "fen" : "initial");
@@ -228,11 +231,20 @@ function Setup({ st, starts, levels, onStart, initial }: { st: any; starts: any;
 
   const auto = prefs.play_auto_level;
   const ok = !("error" in choice);
+  const gamesStep = stepFor(routine, "games");
+  const before = routine?.steps.find((s) => s.key !== "games" && !s.completed) ?? null;
   const forcedColor = "error" in choice ? null : choice.color;
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
       <section className="panel space-y-6 p-5 sm:p-6">
         <h2 className="text-xl">Nova partida</h2>
+        {gamesStep && (
+          <p className="rounded-lg bg-sunk px-3 py-2 text-sm">
+            {gamesStep.completed ? "As partidas da rotina de hoje estão feitas. Jogar mais continua valendo para o seu nível."
+              : <>Rotina de hoje: partida <b>{gamesStep.done + 1} de {gamesStep.target}</b>. Contam as que começam do início, de uma abertura ou do repertório.
+                {before && <> A rotina deixa as partidas para o fim: ainda falta <Link className="link" to={before.to}>{before.title}</Link>.</>}</>}
+          </p>
+        )}
         <Field label="Nível do computador"
           hint={auto ? "O nível automático é o seu nível contra o AURA: vitória sobe, derrota desce. Os níveis são aproximados, não são o rating de um site." : undefined}>
           <div className="space-y-2">
@@ -385,8 +397,9 @@ function Progress({ st }: { st: any }) {
 /* ------------------------------------------------------------------ the game */
 type Hint = { uci: string; full: boolean };
 
-function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
-  onAgain: (s: StartChoice, color?: Color, level?: number) => void; onNew: () => void; refreshState: () => void }) {
+function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: Level[];
+  onAgain: (s: StartChoice, color?: Color, level?: number) => void; onNew: () => void; refreshState: () => void;
+  routine: RoutineDay | null }) {
   const g = usePlay((s) => s.game)!;
   const patch = usePlay((s) => s.patch);
   const { prefs } = usePrefs();
@@ -594,7 +607,7 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
 
       <aside className="min-w-0 space-y-5">
         {g.over ? (
-          <EndPanel levels={levels} onAgain={onAgain} onNew={onNew} />
+          <EndPanel levels={levels} onAgain={onAgain} onNew={onNew} routine={routine} />
         ) : (
           <div className="panel space-y-3 p-4">
             <p className="text-lg font-bold" aria-live="polite">{myTurn ? (thinking ? "Conferindo o seu lance…" : "Sua vez") : "O AURA está pensando…"}</p>
@@ -638,8 +651,8 @@ function GameView({ levels, onAgain, onNew, refreshState }: { levels: Level[];
   );
 }
 
-function EndPanel({ levels, onAgain, onNew }: { levels: Level[]; onAgain: (s: StartChoice, color?: Color, level?: number) => void;
-  onNew: () => void }) {
+function EndPanel({ levels, onAgain, onNew, routine }: { levels: Level[]; onAgain: (s: StartChoice, color?: Color, level?: number) => void;
+  onNew: () => void; routine: RoutineDay | null }) {
   const g = usePlay((s) => s.game)!;
   const { prefs } = usePrefs();
   const over = g.over!;
@@ -656,6 +669,7 @@ function EndPanel({ levels, onAgain, onNew }: { levels: Level[]; onAgain: (s: St
     return `${Number(g.startFen.split(" ")[5] || 1) + Math.floor(idx / 2)}${idx % 2 ? "…" : "."}`;
   };
   const from = (j: Judgment, label: string): StartChoice => ({ fen: j.fen_before, label, opening: null, color: g.userColor, practice: true });
+  const gamesStep = stepFor(routine, "games");
   return (
     <div className="panel space-y-4 p-5">
       <div>
@@ -675,6 +689,11 @@ function EndPanel({ levels, onAgain, onNew }: { levels: Level[]; onAgain: (s: St
               : "A partida acabou cedo demais para mudar o seu nível."}</p>
           )}
           <p className="text-muted">Próximo nível automático: <b className="text-ink">{sum.next_level}</b> · {sum.next_level_name ?? nameFor(sum.next_level, levels)}</p>
+          {gamesStep && !g.practice && (
+            routine?.finished ? <p className="font-bold text-good">Rotina de hoje feita. <Link className="link" to="/">Ver a rotina</Link></p>
+              : gamesStep.completed ? <p>As partidas da rotina de hoje estão feitas.</p>
+              : <p>Rotina de hoje: <b>{Math.min(gamesStep.done, gamesStep.target)} de {gamesStep.target}</b> partidas.</p>
+          )}
         </div>
       )}
       {bad.length > 0 ? (

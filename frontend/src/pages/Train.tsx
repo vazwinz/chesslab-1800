@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import AnalysisBoard from "../components/AnalysisBoard";
 import Board, { Badge, Hesitation } from "../components/Board";
 import Explain from "../components/Explain";
 import Help from "../components/Help";
 import { Empty, ErrorNote, PageHeader, SanText, Spinner } from "../components/ui";
+import { nextStep, stepFor, useRoutine } from "../lib/routine";
 import { api } from "../lib/api";
 import { tryMove, walk } from "../lib/chess";
 import { clock, num } from "../lib/format";
@@ -135,6 +136,7 @@ function Session() {
   const hes = useRef<Hesitation>({ selection_changes: 0, cancelled_drags: 0, piece_selections: 0 });
   const seq = useRef(0);
   const set = st.set;
+  const { routine, reload: reloadRoutine } = useRoutine();
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
@@ -193,8 +195,9 @@ function Session() {
     set({ result: r, ribbon: [...useTrain.getState().ribbon, r.correct ? "ok" : r.timed_out ? "time" : "bad"] });
     if (square) setBadges([{ square, kind: r.correct ? "good" : "bad" }]);
     play(r.correct ? "correct" : "wrong");
+    void reloadRoutine();
     if (r.correct && prefs.auto_next) window.setTimeout(() => void nextRef.current(), 1100);
-  }, [set, prefs.auto_next]);
+  }, [set, prefs.auto_next, reloadRoutine]);
   const nextRef = useRef(next);
   nextRef.current = next;
 
@@ -324,6 +327,8 @@ function Session() {
 
   if (!session) return null;
   const sessionTitle = SESSION_KINDS[session.kind] ?? session.kind;
+  const rStep = stepFor(routine, session.kind);
+  const rNext = nextStep(routine);
 
   if (view === "analysis" && result) {
     const played: string[] = [];
@@ -351,6 +356,11 @@ function Session() {
           {ex && ex.mode !== "standard" && <span className="chip">{MODE_LABEL[ex.mode] ?? ex.mode}</span>}
           {ex?.pressure_level && <span className="chip">nível {ex.pressure_level}</span>}
           {ex?.concept && <span className="chip">{meta.theme(ex.concept)}</span>}
+          {rStep && (
+            <span className={`chip ${rStep.completed ? "border-good/50 text-good" : "border-pen/40 text-pen"}`}>
+              rotina: {Math.min(rStep.done, rStep.target)}/{rStep.target}{rStep.completed ? " ✓" : ""}
+            </span>
+          )}
           <button className="btn-quiet btn-sm ml-auto" onClick={end}>Encerrar sessão</button>
         </div>
         <div className="relative">
@@ -437,6 +447,14 @@ function Session() {
               )}
               {result.best_san && <p className="mt-1">Melhor: <b><SanText san={result.best_san} /></b>. Na partida você jogou <SanText san={result.your_game_move} />.</p>}
             </div>
+            {rStep?.completed && (
+              <div className="rounded-lg border border-good/40 bg-good/10 px-4 py-3">
+                <p className="font-bold text-good">Passo da rotina feito: {rStep.title}.</p>
+                {rNext ? (
+                  <Link className="btn-primary mt-2" to={rNext.to}>Próximo passo: {rNext.title}</Link>
+                ) : <p className="text-sm text-muted">A rotina de hoje está feita. Pode continuar treinando: tudo conta.</p>}
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               <button className="btn-primary" onClick={() => void next()} disabled={busy}>Próximo puzzle <span className="kbd ml-1 border-pen-ink/30 bg-transparent text-pen-ink/80">Enter</span></button>
               <button className="btn" onClick={() => setExplain(true)} disabled={explain}>Explicar <span className="kbd">E</span></button>

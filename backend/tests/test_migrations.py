@@ -79,8 +79,11 @@ def test_upgrade_from_030_keeps_all_progress(old_db):
         rr = d["real_rating"]  # filled from the PGN headers stored by 0.3.0
         assert rr["main"]["current"] in (1432, 1511) and rr["main"]["games"] == 4
         assert rr["main"]["time_class"] == "blitz"
-        plan = c.get("/api/plan/today").json()
-        titles = {b["title"] for b in plan["blocks"]}
+        routine = c.get("/api/routine/today").json()
+        assert routine["steps"] and routine["steps"][-1]["key"] == "games"
+        from app.models import PlanBlock
+        with dbmod.SessionLocal() as s:  # the 0.3.0 plan blocks, kept for the calendar, were translated
+            titles = {b.title for b in s.query(PlanBlock)}
         assert "Padrões táticos" in titles and "Tactical patterns" not in titles
         loop = c.get("/api/cognitive/loop").json()
         assert all("cycle started" != e["msg"] for e in loop["log"])
