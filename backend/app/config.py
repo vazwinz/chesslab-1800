@@ -25,10 +25,15 @@ def _list(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
+def _data_dir() -> str:
+    return os.getenv("CHESSLAB_DATA_DIR", str(BACKEND_DIR / "data"))
+
+
 @dataclass
 class Settings:
+    data_dir: str = field(default_factory=_data_dir)
     database_url: str = field(
-        default_factory=lambda: os.getenv("DATABASE_URL", f"sqlite:///{(BACKEND_DIR / 'data' / 'chesslab.db').as_posix()}")
+        default_factory=lambda: os.getenv("DATABASE_URL", f"sqlite:///{(Path(_data_dir()) / 'chesslab.db').as_posix()}")
     )
     stockfish_path: str = field(default_factory=lambda: os.getenv("STOCKFISH_PATH", _default_stockfish()))
     engine_default_depth: int = field(default_factory=lambda: int(os.getenv("ENGINE_DEPTH", "16")))

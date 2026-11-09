@@ -12,3 +12,7 @@ frontend/dist/
 .env
 lichess_db_puzzle.csv*
 !backend/tests/fixtures/*
+
+desktop/dist/
+desktop/build/
+desktop/stockfish_bin/

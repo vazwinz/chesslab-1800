@@ -12,6 +12,17 @@ A local chess training platform aimed at reaching ~1800 on Chess.com. It has rea
 | Engine | Stockfish (native binary, UCI). The path is set with `STOCKFISH_PATH` |
 | Puzzles | Lichess puzzle database (CC0), loaded by a streaming importer |
 
+## AURA desktop app (Windows + Linux)
+
+AURA is ChessLab packaged as a normal desktop program: double-click it, a window opens, and Stockfish ships inside. Your data is kept in `%LOCALAPPDATA%\AURA` on Windows and `~/.local/share/aura` on Linux. On first start, open **Setup → Download and import from Lichess**.
+
+| | Build it yourself | Or let GitHub build it |
+|---|---|---|
+| Windows | `powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1` creates `desktop\dist\AURA\AURA.exe` plus Desktop and Start-menu shortcuts | Actions → **desktop** → Run workflow → download `AURA-Windows` |
+| Linux | `bash desktop/build_linux.sh` creates `desktop/dist/AURA/AURA`, a menu entry "AURA" and an `aura` command | Same workflow → `AURA-Linux` |
+
+You need Python 3.11+ and Node 18+ for the build only, not to run the app. The window uses Edge WebView2 on Windows (built into Windows 10/11) and Qt WebEngine on Linux. On Ubuntu/Debian, if the window doesn't open, install `sudo apt install libxcb-cursor0`. If the window still fails, AURA opens in your browser instead. For development without packaging, run `python desktop/aura.py`.
+
 ## Quick start: Windows (PowerShell)
 
 You need: **Python 3.11+**, **Node.js 18+**, **Git**, and **Stockfish** for Windows from <https://stockfishchess.org/download/>. Unzip Stockfish somewhere, e.g. `C:\Tools\stockfish\`.

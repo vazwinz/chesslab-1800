@@ -10,11 +10,12 @@ import Endgames from "./pages/Endgames";
 import Games from "./pages/Games";
 import Openings from "./pages/Openings";
 import Plan from "./pages/Plan";
+import Setup from "./pages/Setup";
 import Train from "./pages/Train";
 
 const NAV = [
   ["/", "Dashboard"], ["/train", "Train"], ["/cognitive", "Cognitive"], ["/analysis", "Analysis"],
-  ["/games", "Games"], ["/openings", "Openings"], ["/endgames", "Endgames"], ["/plan", "Plan"],
+  ["/games", "Games"], ["/openings", "Openings"], ["/endgames", "Endgames"], ["/plan", "Plan"], ["/setup", "Setup"],
 ] as const;
 
 function Shell() {
@@ -43,6 +44,7 @@ function Shell() {
       </aside>
       <main className="min-w-0 flex-1 p-4 md:p-6">
         {health && !health.ok && <div className="card mb-4 text-bad">Backend not reachable. Start it with <code>uvicorn app.main:app</code> in backend/.</div>}
+        {puzzles === 0 && <div className="card mb-4 border-accent/50 text-sm">No puzzles yet. <NavLink to="/setup" className="text-accent underline">Download the Lichess puzzle database</NavLink> to start training.</div>}
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/train" element={<Train />} />
@@ -52,6 +54,7 @@ function Shell() {
           <Route path="/openings" element={<Openings />} />
           <Route path="/endgames" element={<Endgames />} />
           <Route path="/plan" element={<Plan />} />
+          <Route path="/setup" element={<Setup />} />
         </Routes>
       </main>
     </div>

@@ -15,6 +15,9 @@ This list covers everything that is minimal, unverified or missing. "Verified" h
 
 ## Not verified here: please check on your PC
 
+- **AURA on Windows.** The Linux build was built and run here: native Qt window, bundled Stockfish, browser fallback. The Windows build (`desktop/build_windows.ps1`, PyInstaller + Edge WebView2) and the GitHub Actions workflow could not be run. The Stockfish download in `fetch_stockfish.py` assumes the release asset names of `sf_17.1` (github.com is blocked here). If the download fails, use `--from <path>`.
+- **Linux package size.** About 670 MB unpacked (274 MB tar.gz), mostly Qt WebEngine. A future GTK/WebKit build could be much smaller.
+
 - **The real Lichess dataset.** database.lichess.org is blocked from the build environment. Run the import plus `scripts/verify_install.py` locally (README).
 - **Windows.** `setup.ps1` and `run.ps1` were written for PowerShell but could not be executed here. The Python and Node code is cross-platform. Stockfish is found through `STOCKFISH_PATH`.
 - **PostgreSQL.** SQLAlchemy supports it and the code is dialect-neutral (bulk insert and update use Core statements), but it is untested.

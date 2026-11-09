@@ -25,7 +25,7 @@ export default function Dashboard() {
       </div>
       {!d.has_data && (
         <div className="card border-accent/40">
-          No training data yet. <Link className="text-accent underline" to="/train">Start a session</Link> (puzzles must be imported first — see README).
+          No training data yet. <Link className="text-accent underline" to="/train">Start a session</Link> (first import puzzles in <Link className="text-accent underline" to="/setup">Setup</Link>).
         </div>
       )}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">

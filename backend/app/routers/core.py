@@ -505,6 +505,38 @@ def endgame_move(body: EndgameMoveIn):
     return {**reply, "finished": bool(done), **(done or {})}
 
 
+# ---------------------------------------------------------------- setup (desktop app)
+@router.get("/setup")
+def setup_status(db: Session = Depends(get_db)):
+    from ..config import settings
+    from ..services import import_jobs
+
+    return {"engine": get_engine().status(), "puzzles": puzzles.puzzle_count(db), "data_dir": settings.data_dir,
+            "database_url": settings.database_url, "import": import_jobs.state(),
+            "lichess_url": import_jobs.LICHESS_PUZZLE_URL}
+
+
+class ImportIn(BaseModel):
+    download: bool = False
+    path: str | None = None
+    limit: int | None = Field(None, ge=1)
+    min_rating: int | None = Field(None, ge=0, le=4000)
+    max_rating: int | None = Field(None, ge=0, le=4000)
+
+
+@router.post("/setup/import")
+def setup_import(body: ImportIn):
+    from ..services import import_jobs
+
+    try:
+        return import_jobs.start(body.path, body.download, limit=body.limit, min_rating=body.min_rating,
+                                 max_rating=body.max_rating)
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+
 # ---------------------------------------------------------------- dashboard & coach
 @router.get("/dashboard")
 def dash(db: Session = Depends(get_db)):
