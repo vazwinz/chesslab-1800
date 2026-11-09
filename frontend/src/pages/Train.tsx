@@ -112,6 +112,11 @@ export default function Train() {
 }
 
 /* ------------------------------------------------------------------ the session */
+/** Milliseconds since the exercise was shown. The clock starts after the opponent's move has been
+ *  played on the board, so an answer given before that counts as 0, never as a negative time
+ *  (which the server refuses). */
+const sinceServed = (servedAt: number) => Math.max(0, Math.round(Date.now() - servedAt));
+
 function Session() {
   const st = useTrain();
   const { session, ex, fen, lastMove, result, servedAt, ribbon } = st;
@@ -198,7 +203,7 @@ function Session() {
     setBusy(true);
     try {
       const r = await api.post(`/api/attempts/${ex.attempt_id}/give-up`, { timed_out: timedOut,
-        elapsed_ms: Math.round(Date.now() - servedAt), hesitation: hes.current });
+        elapsed_ms: sinceServed(servedAt), hesitation: hes.current });
       finish(r);
     } catch (e: any) {
       setErr(e.message);
@@ -227,7 +232,7 @@ function Session() {
     setBusy(true);
     try {
       const r = await api.post(`/api/attempts/${ex.attempt_id}/move`, {
-        uci, elapsed_ms: Math.round(Date.now() - servedAt), hesitation: hes.current });
+        uci, elapsed_ms: sinceServed(servedAt), hesitation: hes.current });
       if (r.locked) {
         set({ fen: before });
         setErr(`Pense primeiro: o tabuleiro libera em ${Math.ceil(r.remaining_ms / 1000)} s.`);
@@ -259,7 +264,7 @@ function Session() {
     setBusy(true);
     try {
       const moves = line.replace(/\d+\.(\.\.)?/g, " ").split(/[\s,]+/).filter(Boolean);
-      const t = Math.round(Date.now() - servedAt);
+      const t = sinceServed(servedAt);
       finish(await api.post(`/api/attempts/${ex.attempt_id}/line`, { moves, elapsed_ms: t, first_move_ms: t, hesitation: hes.current }));
     } catch (e: any) {
       setErr(e.message);
