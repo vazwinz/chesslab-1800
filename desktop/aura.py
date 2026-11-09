@@ -3,7 +3,7 @@
 Starts the FastAPI backend on a free local port and opens it in a native window (pywebview:
 Edge WebView2 on Windows, Qt WebEngine/GTK on Linux). If no native window toolkit is available,
 it opens your default browser instead. Data lives in your user profile, not next to the app:
-  Windows: %LOCALAPPDATA%\\AURA      Linux: ~/.local/share/aura
+  Windows: %LOCALAPPDATA%\\AURA      Linux: ~/.local/share/aura      (or CHESSLAB_DATA_DIR)
 
     python desktop/aura.py               # dev run from the repo
     AURA.exe / ./AURA                    # packaged app
@@ -37,7 +37,13 @@ LIGHT_BG, DARK_BG = "#F3F5F8", "#14181F"   # the app's page colour in each theme
 
 
 def user_data_dir() -> Path:
-    if os.name == "nt":
+    """The one folder for the database, backups, secrets.json, aura.log and the window profile.
+    CHESSLAB_DATA_DIR wins when it is set (tests, a second profile), so nothing is written to
+    the default folder in that case."""
+    override = os.getenv("CHESSLAB_DATA_DIR")
+    if override:
+        d = Path(override).expanduser()
+    elif os.name == "nt":
         base = Path(os.getenv("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
         d = base / APP_NAME
     else:
@@ -48,7 +54,7 @@ def user_data_dir() -> Path:
 
 def configure_env() -> Path:
     data = user_data_dir()
-    os.environ.setdefault("CHESSLAB_DATA_DIR", str(data))
+    os.environ["CHESSLAB_DATA_DIR"] = str(data)  # the backend and the window process read it
     if FROZEN:
         os.environ.setdefault("FRONTEND_DIST", str(BUNDLE / "frontend_dist"))
         exe = "stockfish.exe" if os.name == "nt" else "stockfish"

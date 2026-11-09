@@ -156,20 +156,21 @@ def test_app_info_and_meta(client):
 
 
 def test_dashboard_days_follow_local_time(client, monkeypatch):
-    """An attempt finished at 23:30 in São Paulo (02:30 UTC next day) counts for the local day."""
+    """An attempt finished at 23:30 in São Paulo (02:30 UTC next day) counts for the local day.
+    Without time.tzset (Windows) the computer's own time zone is used: the case is the same on a
+    PC set to São Paulo or anywhere west of UTC, and still checks the local day elsewhere."""
     import os
-    from datetime import date, datetime, timedelta
+    from datetime import date, datetime, timedelta, timezone
 
-    if not hasattr(time, "tzset"):
-        pytest.skip("needs time.tzset")
-    monkeypatch.setenv("TZ", "America/Sao_Paulo")
-    time.tzset()
+    if hasattr(time, "tzset"):
+        monkeypatch.setenv("TZ", "America/Sao_Paulo")
+        time.tzset()
     try:
         from app.models import Attempt
 
         today = date.today()
         local_2330 = datetime.combine(today, datetime.min.time()) + timedelta(hours=23, minutes=30)
-        utc = local_2330 + timedelta(hours=3)  # São Paulo is UTC-3
+        utc = local_2330.astimezone(timezone.utc).replace(tzinfo=None)  # stored as naive UTC
         with dbmod.SessionLocal() as s:
             s.add(Attempt(exercise_kind="puzzle", mode="standard", correct=True, total_ms=60000, served_at=utc,
                           themes="fork", moves_played=[], move_times_ms=[], hesitation={}, candidates=[],
@@ -182,8 +183,9 @@ def test_dashboard_days_follow_local_time(client, monkeypatch):
         assert d["daily_minutes"][-1]["minutes"] == 1.0
     finally:
         monkeypatch.delenv("TZ", raising=False)
-        time.tzset()
         os.environ.pop("TZ", None)
+        if hasattr(time, "tzset"):
+            time.tzset()
 
 
 def test_band_follows_an_established_rating_but_not_a_provisional_one(db):

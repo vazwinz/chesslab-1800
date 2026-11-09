@@ -113,10 +113,66 @@ def test_setup_import_validation(client):
     assert client.post("/api/setup/import", json={}).status_code == 422
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="uses a POSIX env var for the data dir")
-def test_launcher_headless(tmp_path):
+def _aura_is_open() -> bool:
+    """True when an AURA window holds the single-instance lock (Windows only)."""
+    if sys.platform != "win32":
+        return False
+    import ctypes
+
+    k32 = ctypes.windll.kernel32
+    handle = k32.OpenMutexW(0x00100000, False, "Local\\AURA-ChessLab1800")  # SYNCHRONIZE
+    if handle:
+        k32.CloseHandle(handle)
+        return True
+    return False
+
+
+def test_launcher_puts_everything_in_the_data_dir_override(tmp_path):
+    """CHESSLAB_DATA_DIR moves everything the launcher writes: the database, aura.log (the path
+    shown in the error dialogs) and the window profile. The default folder is not even created."""
+    import json
+    import os
+    import socket
+
+    if _aura_is_open():
+        pytest.skip("AURA is open: its single-instance lock makes a second launcher exit")
     launcher = Path(__file__).resolve().parents[2] / "desktop" / "aura.py"
-    env = {"XDG_DATA_HOME": str(tmp_path), "PATH": "/usr/bin:/bin:/usr/games", "HOME": str(tmp_path)}
+    data, home = tmp_path / "custom data", tmp_path / "home"
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    env = {**os.environ, "CHESSLAB_DATA_DIR": str(data), "LOCALAPPDATA": str(home), "XDG_DATA_HOME": str(home)}
+    env.pop("DATABASE_URL", None)
+    p = subprocess.Popen([sys.executable, str(launcher), "--headless", "--port", str(port)], env=env,
+                         stdout=subprocess.PIPE, text=True)
+    try:
+        line = p.stdout.readline()
+        assert f"AURA running at http://127.0.0.1:{port}" in line and str(data) in line, line
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/setup") as r:
+            setup = json.load(r)
+        assert setup["puzzles"] == 0 and Path(setup["data_dir"]) == data
+        assert (data / "chesslab.db").exists() and (data / "aura.log").exists()
+        assert not (home / "AURA").exists() and not (home / "aura").exists()
+    finally:
+        p.terminate()
+        p.wait(10)
+
+
+def test_launcher_headless(tmp_path):
+    """Default data folder: %LOCALAPPDATA%\\AURA on Windows, $XDG_DATA_HOME/aura elsewhere."""
+    import os
+
+    if _aura_is_open():
+        pytest.skip("AURA is open: its single-instance lock makes a second launcher exit")
+    launcher = Path(__file__).resolve().parents[2] / "desktop" / "aura.py"
+    if sys.platform == "win32":
+        # Windows needs SYSTEMROOT & co. to start Python; the override must not be inherited
+        env = {k: v for k, v in os.environ.items() if k not in ("CHESSLAB_DATA_DIR", "DATABASE_URL")}
+        env["LOCALAPPDATA"] = str(tmp_path)
+        expected = tmp_path / "AURA"
+    else:
+        env = {"XDG_DATA_HOME": str(tmp_path), "PATH": "/usr/bin:/bin:/usr/games", "HOME": str(tmp_path)}
+        expected = tmp_path / "aura"
     p = subprocess.Popen([sys.executable, str(launcher), "--headless", "--port", "8799"], env=env,
                          stdout=subprocess.PIPE, text=True)
     try:
@@ -124,7 +180,7 @@ def test_launcher_headless(tmp_path):
         assert "AURA running at http://127.0.0.1:8799" in line
         with urllib.request.urlopen("http://127.0.0.1:8799/api/setup") as r:
             assert b'"puzzles":0' in r.read()
-        assert (tmp_path / "aura" / "chesslab.db").exists()
+        assert (expected / "chesslab.db").exists() and (expected / "aura.log").exists()
     finally:
         p.terminate()
         p.wait(10)

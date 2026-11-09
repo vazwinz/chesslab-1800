@@ -95,7 +95,7 @@ cd backend && .venv/bin/python -m pytest -q          # Windows: .venv\Scripts\py
 cd frontend && npx tsc -b                             # type check
 ```
 
-91 backend tests cover legality, the importer (streaming, validation, incremental updates, resumable download), engine communication (real Stockfish), migrations (a real 0.3.0 database, rollback on failure, models vs migrations), local-only security, the coach (board facts, AI answer validation), Chess.com import, update check, persistence across restarts, the API, and every Cognitive Engine module including a full closed-loop cycle. Tests that need Stockfish are skipped when it is missing.
+92 backend tests cover legality, the importer (streaming, validation, incremental updates, resumable download), engine communication (real Stockfish), migrations (a real 0.3.0 database, rollback on failure, models vs migrations), the desktop launcher's data folder (default and `CHESSLAB_DATA_DIR`), local-only security, the coach (board facts, AI answer validation), Chess.com import, update check, persistence across restarts, the API, and every Cognitive Engine module including a full closed-loop cycle. Tests that need Stockfish are skipped when it is missing.
 
 Browser tests (Playwright): start the server with puzzles imported, then `node frontend/e2e/smoke.mjs http://127.0.0.1:8000 <dir>` (light and dark desktop, explanation, analysis and back, every Diagnóstico tab, every screen, phone layout) and `node frontend/e2e/first_run.mjs <url> <dir>` on an empty database (tour and empty states). Both save screenshots.
 
