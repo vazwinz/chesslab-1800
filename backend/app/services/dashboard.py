@@ -9,7 +9,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from ..cognitive.stats import wilson
-from ..models import Attempt, Game, PuzzleTheme, RatingPoint, TrainingSession
+from ..models import Attempt, Game, RatingPoint, TrainingSession
 from ..timeutil import iso, local_date
 from . import adaptive, prefs
 from .plan import consistency
@@ -42,11 +42,14 @@ def overview(db: Session) -> dict:
     daily = [{"day": (start + timedelta(days=i)).isoformat(),
               "minutes": round(per_day.get(start + timedelta(days=i), 0), 1)} for i in range(28)]
 
-    # themes (through the indexed puzzle_themes table)
-    rows = db.execute(select(PuzzleTheme.theme, func.count(), _ok())
-                      .join(Attempt, Attempt.puzzle_id == PuzzleTheme.puzzle_id)
-                      .where(*_graded_puzzles()).group_by(PuzzleTheme.theme)).all()
-    themes = [{"theme": t, **wilson(int(ok or 0), int(n))} for t, n, ok in rows if n >= MIN_THEME_N]
+    # themes: two light columns of your attempts (a join with the 15M-row puzzle_themes table made
+    # SQLite walk that whole table)
+    tally: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    for themes_txt, ok in db.execute(select(Attempt.themes, Attempt.correct).where(*_graded_puzzles())):
+        for t in (themes_txt or "").split():
+            tally[t][0] += 1
+            tally[t][1] += int(bool(ok))
+    themes = [{"theme": t, **wilson(ok, n)} for t, (n, ok) in tally.items() if n >= MIN_THEME_N]
     weakest = sorted(themes, key=lambda x: (x["rate"], -x["n"]))[:6]
     strongest = sorted(themes, key=lambda x: (-x["rate"], -x["n"]))[:6]
 

@@ -48,32 +48,61 @@ def recent_puzzle_ids(db: Session, days: int = 30, cap: int = 2000) -> set[str]:
     return set(rows)
 
 
+PROBES_PER_WINDOW = 80
+MAX_EMPTY_PROBES = 40  # a filter that matches almost nothing: widen instead of probing forever
+
+
+def _query(theme: str | None, rating_eq: int | None, lo: int, hi: int, min_len, max_len, r: float, forward: bool):
+    if theme:
+        q = select(Puzzle).join(PuzzleTheme, PuzzleTheme.puzzle_id == Puzzle.id).where(PuzzleTheme.theme == theme)
+        q = q.where(PuzzleTheme.rating == rating_eq) if rating_eq is not None else \
+            q.where(PuzzleTheme.rating.between(lo, hi))
+        key = PuzzleTheme.rand_key
+    else:
+        q = select(Puzzle)
+        q = q.where(Puzzle.rating == rating_eq) if rating_eq is not None else q.where(Puzzle.rating.between(lo, hi))
+        key = Puzzle.rand_key
+    if min_len:
+        q = q.where(Puzzle.solution_len >= min_len)
+    if max_len:
+        q = q.where(Puzzle.solution_len <= max_len)
+    return q.where(key >= r).order_by(key) if forward else q.where(key < r).order_by(key.desc())
+
+
 def select_puzzle(db: Session, rating_min: int, rating_max: int, themes: list[str] | None = None,
                   min_len: int | None = None, max_len: int | None = None, exclude: set[str] | None = None,
                   exclude_recent_days: int = 30, widen: bool = True) -> Puzzle | None:
     """Random puzzle in a rating window, optionally by theme, avoiding recently seen ones.
-    Uses an indexed random key instead of ORDER BY RANDOM(), so it stays fast on millions of rows."""
+
+    Fast on the full Lichess dump (millions of rows): instead of a range on rating, which made
+    SQLite sort every puzzle of the window by rand_key (~0.7 s per puzzle on 3M rows), it first
+    probes single random rating VALUES (`rating = R AND rand_key >= r`), which the composite
+    indexes (rating, rand_key) and (theme, rating, rand_key) answer in order without sorting.
+    Only when the probes find nothing (a small or sparse database, or a very narrow filter) it
+    falls back to the range query, which is cheap exactly in those cases."""
     excluded = set(exclude or ()) | recent_puzzle_ids(db, exclude_recent_days)
-    lo, hi = rating_min, rating_max
+    lo, hi = int(rating_min), int(rating_max)
     for _ in range(4 if widen else 1):
-        theme = random.choice(themes) if themes else None
-        for attempt in range(2):
+        values = list(range(lo, hi + 1))
+        random.shuffle(values)
+        empty = 0
+        for value in values[:PROBES_PER_WINDOW]:
+            if empty >= MAX_EMPTY_PROBES:
+                break
+            empty += 1
+            theme = random.choice(themes) if themes else None
             r = random.random()
-            if theme:
-                q = (select(Puzzle).join(PuzzleTheme, PuzzleTheme.puzzle_id == Puzzle.id)
-                     .where(PuzzleTheme.theme == theme, PuzzleTheme.rating.between(lo, hi)))
-                key = PuzzleTheme.rand_key
-            else:
-                q = select(Puzzle).where(Puzzle.rating.between(lo, hi))
-                key = Puzzle.rand_key
-            if min_len:
-                q = q.where(Puzzle.solution_len >= min_len)
-            if max_len:
-                q = q.where(Puzzle.solution_len <= max_len)
-            q = q.where(key >= r).order_by(key) if attempt == 0 else q.where(key < r).order_by(key.desc())
-            for p in db.execute(q.limit(60)).scalars():
-                if p.id not in excluded:
-                    return p
+            for forward in (True, False):
+                for p in db.execute(_query(theme, value, lo, hi, min_len, max_len, r, forward).limit(20)).scalars():
+                    empty = 0
+                    if p.id not in excluded:
+                        return p
+        for theme in (random.sample(themes, len(themes)) if themes else [None]):
+            r = random.random()
+            for forward in (True, False):
+                for p in db.execute(_query(theme, None, lo, hi, min_len, max_len, r, forward).limit(60)).scalars():
+                    if p.id not in excluded:
+                        return p
         lo, hi = lo - 150, hi + 150  # widen gradually if the window is empty / exhausted
     return None
 
@@ -151,13 +180,27 @@ def solution_san(p: Puzzle) -> list[str]:
     return out
 
 
-def theme_counts(db: Session) -> dict[str, int]:
-    rows = db.execute(select(PuzzleTheme.theme, func.count()).group_by(PuzzleTheme.theme)).all()
-    return {t: n for t, n in rows}
+def theme_counts(db: Session, refresh: bool = False) -> dict[str, int]:
+    """Puzzles per theme. Counting 15M theme rows takes ~0.5 s on the full dump, so the result is
+    cached in the database and recomputed only when the number of puzzles changes."""
+    from ..models import KV
+
+    total = puzzle_count(db)
+    kv = db.get(KV, "theme_counts")
+    if kv is not None and not refresh and (kv.value or {}).get("total") == total:
+        return dict(kv.value.get("counts") or {})
+    counts = {t: n for t, n in db.execute(select(PuzzleTheme.theme, func.count()).group_by(PuzzleTheme.theme))}
+    value = {"total": total, "counts": counts}
+    if kv is None:
+        db.add(KV(key="theme_counts", value=value))
+    else:
+        kv.value = value
+    db.commit()
+    return counts
 
 
 def themed_any(db: Session, themes: list[str]) -> list[str]:
     """Restrict a theme list to themes present in the local database."""
-    have = set(db.execute(select(PuzzleTheme.theme).where(PuzzleTheme.theme.in_(themes)).distinct()).scalars())
-    return [t for t in themes if t in have]
+    have = theme_counts(db)
+    return [t for t in themes if have.get(t)]
 

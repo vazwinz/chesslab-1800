@@ -50,8 +50,60 @@ def test_download_and_import_job(client, tmp_path, monkeypatch):
         srv.shutdown()
     assert st["status"] == "done", st
     assert st["inserted"] >= 40 and st["invalid"] == 1
-    assert (tmp_path / "data" / "lichess_db_puzzle.csv.zst").exists()
+    # imported, so the ~300 MB download is deleted
+    assert not list((tmp_path / "data").glob("lichess_db_puzzle.csv.zst*"))
     assert client.get("/api/setup").json()["puzzles"] == st["inserted"]
+
+
+def test_download_reuses_a_complete_part_file_when_rename_is_blocked(client, tmp_path, monkeypatch):
+    """The Windows failure: 310/310 MB downloaded, then '[WinError 5] Acesso negado' on rename.
+    The complete .part must be reused (no new download) and imported even if rename keeps failing."""
+    import os
+
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr(settings, "data_dir", str(data))
+    www = tmp_path / "www"
+    www.mkdir()
+    shutil.copy(PUZZLE_FIXTURE, www / "dump.csv.zst")
+    shutil.copy(PUZZLE_FIXTURE, data / "lichess_db_puzzle.csv.zst.part")  # left over by the failed run
+    real_replace, calls = os.replace, []
+
+    def locked(src, dst):
+        calls.append(src)
+        raise PermissionError(5, "Acesso negado")
+
+    monkeypatch.setattr(import_jobs.os, "replace", locked)
+    monkeypatch.setattr(import_jobs, "_sleep", lambda s: None)
+    srv = _serve(www)
+    try:
+        st = import_jobs.start(download=True, url=f"http://127.0.0.1:{srv.server_port}/dump.csv.zst")
+        st = _wait()
+    finally:
+        srv.shutdown()
+        monkeypatch.setattr(import_jobs.os, "replace", real_replace)
+    assert st["status"] == "done", st
+    assert st.get("reused") is True and len(calls) == 12
+    assert st["inserted"] >= 40
+
+
+def test_interrupted_download_continues_or_restarts(client, tmp_path, monkeypatch):
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr(settings, "data_dir", str(data))
+    www = tmp_path / "www"
+    www.mkdir()
+    shutil.copy(PUZZLE_FIXTURE, www / "dump.csv.zst")
+    blob = PUZZLE_FIXTURE.read_bytes()
+    (data / "lichess_db_puzzle.csv.zst.part").write_bytes(blob[: len(blob) // 2])  # half done
+    srv = _serve(www)  # http.server ignores Range, so the download must restart cleanly
+    try:
+        import_jobs.start(download=True, url=f"http://127.0.0.1:{srv.server_port}/dump.csv.zst")
+        st = _wait()
+    finally:
+        srv.shutdown()
+    assert st["status"] == "done", st
+    assert st["downloaded"] == len(blob) and st["inserted"] >= 40
 
 
 def test_setup_import_validation(client):

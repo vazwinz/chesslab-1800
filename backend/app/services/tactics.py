@@ -154,8 +154,9 @@ def move_facts(board: chess.Board, move: chess.Move, prev_move: chess.Move | Non
     if len(valuable) >= 2 and moved_safe:
         f.fork = [f"{piece_name(t)} em {sq(s)}" for s, t in valuable]
         f.motifs.append("fork")
+    # pieces the moved piece now threatens to win (attacked and undefended, or attacked by something cheaper)
     f.attacks_unprotected = [f"{piece_name(t)} em {sq(s)}" for s, t, d in targets
-                             if not d and t not in (chess.KING, chess.PAWN)]
+                             if t not in (chess.KING, chess.PAWN) and en_prise(after, s)]
 
     # pins and skewers created by the moved slider
     if moved_type in DIRS:
@@ -166,7 +167,10 @@ def move_facts(board: chess.Board, move: chess.Move, prev_move: chess.Move | Non
             a, b = (after.piece_at(x) for x in hit)
             if a.color != them or b.color != them:
                 continue
-            if b.piece_type == chess.KING or VALUE[b.piece_type] > VALUE[a.piece_type]:
+            pin_worthy = b.piece_type == chess.KING or (
+                b.piece_type in (chess.QUEEN, chess.ROOK) and VALUE[b.piece_type] > VALUE[a.piece_type]
+                and a.piece_type != chess.PAWN)
+            if pin_worthy:
                 kind = "no rei" if b.piece_type == chess.KING else f"contra {piece_name(b.piece_type)} em {sq(hit[1])}"
                 f.pins.append(f"{piece_name(a.piece_type)} em {sq(hit[0])} {kind}")
                 if "pin" not in f.motifs:
@@ -268,36 +272,33 @@ def tags_for(f: MoveFacts) -> list[str]:
         t.append(f"ataque descoberto: {d}")
     if f.threatens_mate and not f.mate:
         t.append(f"ameaça mate com {f.threatens_mate}")
-    if f.attacks_unprotected and not f.fork:
-        t.append("ataca " + " e ".join(f.attacks_unprotected[:2]) + ", sem defesa")
+    if f.attacks_unprotected and not f.fork and not f.capture:
+        t.append("ameaça ganhar " + " e ".join(f.attacks_unprotected[:2]))
     if f.only_move:
         t.append("único lance legal")
     return t
 
 
 def material_change(start: chess.Board, end: chess.Board, pov: chess.Color) -> dict:
-    """What each side lost between two positions (promotions included), from `pov`'s side."""
+    """Net material change between two positions from `pov`'s side, per piece type
+    (trades cancel out; a promotion counts as the new piece minus the pawn)."""
     a, b = material(start), material(end)
-    mine_lost = {pt: max(0, a[pov][pt] - b[pov][pt]) for pt in a[pov]}
-    theirs_lost = {pt: max(0, a[not pov][pt] - b[not pov][pt]) for pt in a[not pov]}
-    balance = (material_value(b[pov]) - material_value(b[not pov])) - (material_value(a[pov]) - material_value(a[not pov]))
-    return {"won": material_words(theirs_lost), "lost": material_words(mine_lost), "balance": balance}
+    net = {pt: (b[pov][pt] - a[pov][pt]) - (b[not pov][pt] - a[not pov][pt]) for pt in a[pov]}
+    plus = {pt: n for pt, n in net.items() if n > 0}
+    minus = {pt: -n for pt, n in net.items() if n < 0}
+    balance = sum(VALUE[pt] * n for pt, n in net.items())
+    return {"plus": material_words(plus), "minus": material_words(minus), "balance": balance}
 
 
 def describe_material(ch: dict, who: str) -> str:
-    """'você ganha um cavalo' / 'as Brancas ganham uma torre e perdem um bispo' / ''."""
-    if ch["balance"] == 0 and not ch["won"] and not ch["lost"]:
+    """'você fica com um cavalo a mais (saldo de material +3)' / '' when nothing changes."""
+    if not ch["plus"] and not ch["minus"]:
         return ""
-    plural = who != "você"
-    if ch["won"] and ch["lost"]:
-        text = f"{who} {'ganham' if plural else 'ganha'} {ch['won']} e {'perdem' if plural else 'perde'} {ch['lost']}"
-    elif ch["won"]:
-        text = f"{who} {'ganham' if plural else 'ganha'} {ch['won']}"
-    elif ch["lost"]:
-        text = f"{who} {'perdem' if plural else 'perde'} {ch['lost']}"
-    else:
-        text = ""
-    if ch["balance"]:
-        sign = "+" if ch["balance"] > 0 else ""
-        text += f" (saldo de material {sign}{ch['balance']})" if text else f"saldo de material {sign}{ch['balance']}"
-    return text
+    verb = "fica" if who == "você" else "ficam"
+    parts = []
+    if ch["plus"]:
+        parts.append(f"{ch['plus']} a mais")
+    if ch["minus"]:
+        parts.append(f"{ch['minus']} a menos")
+    sign = "+" if ch["balance"] > 0 else ""
+    return f"{who} {verb} com {' e '.join(parts)} (saldo de material {sign}{ch['balance']})"

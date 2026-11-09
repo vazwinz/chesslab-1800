@@ -370,6 +370,7 @@ def games_detail(gid: int, db: Session = Depends(get_db)):
         b.push(mv)
     return {"id": g.id, "pgn": g.pgn, "white": g.white, "black": g.black, "result": g.result,
             "date": g.played_on.isoformat() if g.played_on else None, "time_control": g.time_control,
+            "time_class": g.time_class, "user_elo": g.user_elo, "opponent_elo": g.opponent_elo,
             "user_color": g.user_color, "metrics": g.metrics, "analyzed": g.analyzed,
             "start_fen": start, "moves_uci": ucis, "moves_san": sans,
             "mistakes": [{"id": m.id, "ply": m.ply, "fen": m.fen_before, "move": m.move_san, "move_uci": m.move_uci,

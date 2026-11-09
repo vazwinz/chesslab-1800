@@ -17,9 +17,9 @@ from sqlalchemy.orm import Session
 
 from ..i18n import COLOR, SEVERITY, piece_name
 from ..models import EngineCache
-from .engine import MATE_CP, StockfishService, classify_loss, win_pct
+from .engine import MATE_CP, StockfishService, classify_loss, threat_gain, win_pct
 from .explain import NOT_AN_IDEA, THEMES
-from .tactics import (describe_material, material_change, move_facts, VALUE)
+from .tactics import VALUE, describe_material, en_prise, material_change, move_facts
 
 VERSION = "coach-v2"
 THREAT_CP = 150          # a probe gain below this is not reported as a threat
@@ -74,6 +74,13 @@ def _line(l, stm_white: bool) -> dict:
             "pv_san": l.pv_san[:12], "pv_uci": l.pv[:12], "eval": eval_text(l.cp, l.mate, stm_white)}
 
 
+def _null_board(board: chess.Board) -> chess.Board:
+    """The same position with the other side to move (a fresh board: no null move in its history)."""
+    b = board.copy(stack=False)
+    b.push(chess.Move.null())
+    return chess.Board(b.fen())
+
+
 def gather(engine: StockfishService, board: chess.Board, depth: int, user_move: chess.Move | None = None,
            also_eval: list[chess.Move] | None = None) -> Gathered:
     stm_white = board.turn == chess.WHITE
@@ -85,12 +92,12 @@ def gather(engine: StockfishService, board: chess.Board, depth: int, user_move: 
     best = top[0]
     # what does the opponent threaten? (null-move probe: let them move twice)
     if not board.is_check():
-        null = board.copy()
-        null.push(chess.Move.null())
+        null = _null_board(board)
         if null.is_valid() and not null.is_game_over():
             tl = engine.analyse(null, depth=max(8, depth - 6))
             if tl:
-                g.threat = {"san": tl[0].san, "uci": tl[0].move, "gain_cp": best.cp + tl[0].cp, "mate": tl[0].mate,
+                g.threat = {"san": tl[0].san, "uci": tl[0].move, "mate": tl[0].mate,
+                            "gain_cp": threat_gain(best.cp, best.mate, tl[0].cp, tl[0].mate),
                             "pv_san": tl[0].pv_san[:6], "pv_uci": tl[0].pv[:6]}
     # what does the best move threaten next? (only for quiet best moves)
     bm = chess.Move.from_uci(best.move)
@@ -98,12 +105,14 @@ def gather(engine: StockfishService, board: chess.Board, depth: int, user_move: 
         a2 = board.copy()
         a2.push(bm)
         if not a2.is_game_over():
-            n2 = a2.copy()
-            n2.push(chess.Move.null())
+            n2 = _null_board(a2)
             if n2.is_valid() and not n2.is_game_over():
                 t2 = engine.analyse(n2, depth=max(8, depth - 6))
                 if t2:
-                    g.best_threat = {"san": t2[0].san, "uci": t2[0].move, "gain_cp": t2[0].cp - best.cp,
+                    # our gain if we could move again after the best move (mates handled like threat_gain)
+                    gain = MATE_CP if (t2[0].mate is not None and t2[0].mate > 0) else \
+                        max(-1500, min(1500, t2[0].cp)) - max(-1500, min(1500, best.cp))
+                    g.best_threat = {"san": t2[0].san, "uci": t2[0].move, "gain_cp": gain,
                                      "mate": t2[0].mate, "pv_san": t2[0].pv_san[:6], "pv_uci": t2[0].pv[:6],
                                      "after_fen": n2.fen()}
     if user_move is not None:
@@ -140,20 +149,44 @@ def _user_facts(engine, board: chess.Board, mv: chess.Move, depth: int, top, stm
 
 
 # ------------------------------------------------------------------ the commented main line
-def commented_line(board: chess.Board, pv_uci: list[str], prev: chess.Move | None = None) -> tuple[list[dict], chess.Board]:
+def commented_line(board: chess.Board, pv_uci: list[str], prev: chess.Move | None = None,
+                   prev_capture: bool = False) -> tuple[list[dict], chess.Board]:
     b = board.copy()
     out = []
     for i, u in enumerate(pv_uci[:LINE_PLIES]):
         mv = chess.Move.from_uci(u)
         if mv not in b.legal_moves:
             break
-        f = move_facts(b, mv, prev)
+        f = move_facts(b, mv, prev if prev_capture else None)
+        prev_capture = b.is_capture(mv)
         comment = "; ".join(f.tags) if f.tags else _quiet_comment(b, mv)
         out.append({"ply": i, "san": f.san, "uci": u, "white": b.turn == chess.WHITE, "move_no": b.fullmove_number,
                     "color": f.color, "comment": comment, "motifs": f.motifs})
         b.push(mv)
         prev = mv
     return out, b
+
+
+def settled(board: chess.Board, pv_uci: list[str], max_plies: int = LINE_PLIES) -> chess.Board:
+    """Position where the forcing part of a line ends (no capture or check comes next), so the
+    material count is not muddied by later, unrelated trades."""
+    b = board.copy()
+    for i, u in enumerate(pv_uci[:max_plies]):
+        mv = chess.Move.from_uci(u)
+        if mv not in b.legal_moves:
+            break
+        b.push(mv)
+        if b.is_check() or i + 1 >= len(pv_uci):
+            continue
+        nxt = chess.Move.from_uci(pv_uci[i + 1])
+        if nxt in b.legal_moves and not b.is_capture(nxt) and not b.gives_check(nxt):
+            break
+    return b
+
+
+def _ev(e: dict) -> str:
+    """Evaluation for prose: '+1.25', or 'mate em 2 para as Brancas'."""
+    return e["words"] if e.get("white_mate") is not None else e["text"]
 
 
 def _quiet_comment(b: chess.Board, mv: chess.Move) -> str:
@@ -193,7 +226,8 @@ def build(board: chess.Board, g: Gathered, ctx: dict | None = None) -> dict:
     bm = chess.Move.from_uci(best["uci"])
     bf = move_facts(board, bm)
     line, end = commented_line(board, best["pv_uci"])
-    mat = material_change(board, end, stm)
+    mat = material_change(board, settled(board, best["pv_uci"]), stm)
+    mat_end = material_change(board, end, stm)
 
     # ---- idea of the best move
     idea: list[str] = []
@@ -206,7 +240,7 @@ def build(board: chess.Board, g: Gathered, ctx: dict | None = None) -> dict:
         head = f"{M(best['san'])} é o lance que o Stockfish prefere"
         motif = []
         if bf.fork:
-            motif.append("é um garfo: ataca " + " e ".join(bf.fork) + " ao mesmo tempo")
+            motif.append("é um garfo: ataca " + " e ".join(bf.fork) + " ao mesmo tempo")  # noqa: E501
         motif += [f"crava {p}" for p in bf.pins]
         motif += [f"faz um espeto: ataca {s}" for s in bf.skewers]
         motif += [f"abre um ataque descoberto ({d})" for d in bf.discovered]
@@ -217,7 +251,7 @@ def build(board: chess.Board, g: Gathered, ctx: dict | None = None) -> dict:
         sac = bf.hangs and len(best["pv_uci"]) > 1 and chess.Move.from_uci(best["pv_uci"][1]).to_square == bm.to_square \
             and not (bf.capture_type and VALUE[bf.capture_type] >= VALUE[board.piece_type_at(bm.from_square)])
         if motif:
-            idea.append(f"{head}: {', '.join(motif)}.")
+            idea.append(f"{head}. {_sentence(', '.join(motif))}.")
         elif sac:
             idea.append(f"{head}, e é um sacrifício: {piece_name(board.piece_type_at(bm.from_square))} pode ser "
                         f"capturad{'a' if board.piece_type_at(bm.from_square) in (chess.ROOK, chess.QUEEN) else 'o'} "
@@ -230,9 +264,12 @@ def build(board: chess.Board, g: Gathered, ctx: dict | None = None) -> dict:
             idea.append(_sentence(f"na linha do Stockfish, {describe_material(mat, who)}."))
         if g.best_threat and g.best_threat["gain_cp"] >= THREAT_CP:
             nb = chess.Board(g.best_threat["after_fen"])
-            tf = move_facts(nb, chess.Move.from_uci(g.best_threat["uci"]))
-            what = ", ".join(tf.tags) if tf.tags else "melhorar muito a posição"
-            idea.append(f"Depois dele, a ameaça é {M(g.best_threat['san'])} ({what}).")
+            tm = chess.Move.from_uci(g.best_threat["uci"])
+            already = chess.square_name(tm.to_square) in " ".join(bf.attacks_unprotected)
+            if not already:
+                tf = move_facts(nb, tm)
+                what = ", ".join(tf.tags) if tf.tags else "melhorar muito a posição"
+                idea.append(f"Depois dele, a ameaça é {M(g.best_threat['san'])} ({what}).")
     if len(g.lines) >= 2 and best["mate"] is None:
         gap = best["cp"] - g.lines[1]["cp"]
         if gap >= ONLY_MOVE_GAP:
@@ -248,14 +285,13 @@ def build(board: chess.Board, g: Gathered, ctx: dict | None = None) -> dict:
     if board.is_check():
         threat_txt = f"{_sentence(who)} {'está' if who == 'você' else 'estão'} em xeque: o primeiro passo é sair do xeque."
     elif g.threat and g.threat["gain_cp"] >= THREAT_CP:
-        nb = board.copy()
-        nb.push(chess.Move.null())
+        nb = _null_board(board)
         tmv = chess.Move.from_uci(g.threat["uci"])
         tf = move_facts(nb, tmv)
         what = ", ".join(tf.tags) if tf.tags else "uma jogada forte"
         mate = g.threat.get("mate")
-        threat_txt = (f"Atenção à ameaça do adversário: {M(g.threat['san'])} ({what})"
-                      + (f", que leva a mate em {mate}" if mate and mate > 0 else "") + ".")
+        mate_note = f", que leva a mate em {mate}" if mate and mate > 0 and not (mate == 1 and tf.mate) else ""
+        threat_txt = f"Atenção à ameaça do adversário: {M(g.threat['san'])} ({what}){mate_note}."
         threat_ok = True
         if _parries(board, bm, tmv):
             threat_txt += f" {M(best['san'])} resolve essa ameaça."
@@ -297,7 +333,7 @@ def build(board: chess.Board, g: Gathered, ctx: dict | None = None) -> dict:
     if end.is_checkmate():
         end_note = "A linha termina em xeque-mate."
     else:
-        md = describe_material(mat, who)
+        md = describe_material(mat_end, who)
         end_note = (f"Ao fim desta linha, {md}. " if md else "Ao fim desta linha, o material fica igual. ") + \
                    f"Avaliação do Stockfish: {best['eval']['text']} ({best['eval']['words']})."
 
@@ -326,7 +362,11 @@ def _parries(board: chess.Board, best: chess.Move, threat: chess.Move) -> bool:
         return True
     after = board.copy()
     after.push(best)
-    return threat not in after.legal_moves
+    if threat not in after.legal_moves:
+        return True
+    if board.is_capture(threat):  # the attacked piece moved away or is now protected well enough
+        return after.piece_at(threat.to_square) is None or not en_prise(after, threat.to_square)
+    return False
 
 
 def _user_section(board: chess.Board, g: Gathered, bf, best: dict, who: str, threat_ok: bool) -> dict:
@@ -337,8 +377,8 @@ def _user_section(board: chess.Board, g: Gathered, bf, best: dict, who: str, thr
     if u["is_best"]:
         return {"verdict": "melhor", "headline": f"{M(u['san'])} é o lance que o Stockfish prefere.",
                 "reasons": [], "eval_best": best["eval"]["text"], "eval_user": u["eval"]["text"], "is_best": True}
-    head = (f"{M(u['san'])}: {verdict} segundo o Stockfish. A avaliação vai de {best['eval']['text']} "
-            f"(com {M(best['san'])}) para {u['eval']['text']}.")
+    head = (f"{M(u['san'])}: {verdict} segundo o Stockfish. A avaliação vai de {_ev(best['eval'])} "
+            f"(com {M(best['san'])}) para {_ev(u['eval'])}.")
     if u["verdict"] == "good":
         head = (f"{M(u['san'])} é um lance aceitável: o Stockfish avalia {u['eval']['text']}, perto de "
                 f"{M(best['san'])} ({best['eval']['text']}).")
@@ -350,7 +390,7 @@ def _user_section(board: chess.Board, g: Gathered, bf, best: dict, who: str, thr
         pass
     elif r:
         rm = chess.Move.from_uci(r["uci"])
-        rf = move_facts(after, rm, um)
+        rf = move_facts(after, rm, um if board.is_capture(um) else None)
         if r.get("mate") is not None and r["mate"] > 0:
             reasons.append(f"Depois de {M(u['san'])}, o adversário tem mate em {r['mate']} começando com {M(r['san'])}.")
         else:
@@ -362,13 +402,7 @@ def _user_section(board: chess.Board, g: Gathered, bf, best: dict, who: str, thr
         if threat_ok and g.threat and (g.threat["uci"] == r["uci"] or chess.Move.from_uci(g.threat["uci"]).to_square
                                        == rm.to_square):
             reasons.append(f"Essa ameaça ({M(g.threat['san'])}) já existia antes do seu lance e ele não a resolveu.")
-        rb = after.copy()
-        for x in r["pv_uci"]:
-            mv = chess.Move.from_uci(x)
-            if mv not in rb.legal_moves:
-                break
-            rb.push(mv)
-        ch = material_change(board, rb, stm)
+        ch = material_change(board, settled(after, r["pv_uci"]), stm)
         if ch["balance"] <= -2:
             reasons.append(_sentence(f"na linha do Stockfish depois do seu lance, {describe_material(ch, who)}."))
     if bf.fork or bf.pins or bf.skewers or bf.discovered or (best["mate"] and best["mate"] > 0):

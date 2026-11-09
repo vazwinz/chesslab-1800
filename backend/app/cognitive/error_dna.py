@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Attempt, GameMistake, utcnow
 from ..models import Game
-from ..services.engine import StockfishService, win_pct
+from ..services.engine import StockfishService, threat_gain, win_pct
 
 INFO = {
     "tactical_blindness": {
@@ -153,14 +153,15 @@ def engine_features(engine: StockfishService, board: chess.Board, move: chess.Mo
         f.refutation_forcing = is_forcing(after, chess.Move.from_uci(f.refutation))
     # Null-move threat probe: what would the opponent do if it were their move now?
     if not board.is_check():
-        null = board.copy()
+        null = board.copy(stack=False)
         null.push(chess.Move.null())
+        null = chess.Board(null.fen())  # no null move in the history sent to the engine
         if null.is_valid() and not null.is_game_over():
             nl = engine.analyse(null, depth=max(8, depth - 4))
             if nl:
                 f.threat_move = nl[0].move
                 # how much better the opponent's position becomes if they could move again
-                f.threat_cp = best.cp + nl[0].cp
+                f.threat_cp = threat_gain(best.cp, best.mate, nl[0].cp, nl[0].mate)
                 if f.refutation:
                     t, r = chess.Move.from_uci(f.threat_move), chess.Move.from_uci(f.refutation)
                     f.refutation_is_threat = (t == r) or (t.to_square == r.to_square)

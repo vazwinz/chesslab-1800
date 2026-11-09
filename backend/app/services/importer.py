@@ -22,13 +22,17 @@ from sqlalchemy.orm import Session
 from ..models import ImportJob, Puzzle, PuzzleTheme, utcnow
 
 UPDATABLE = ("rating", "rating_deviation", "popularity", "nb_plays", "game_url", "opening_tags", "solution_len")
+ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 EXPECTED_HEADER = ["PuzzleId", "FEN", "Moves", "Rating", "RatingDeviation", "Popularity", "NbPlays",
                    "Themes", "GameUrl", "OpeningTags"]
 
 
 def open_rows(path: Path) -> Iterator[list[str]]:
-    """Yield CSV rows (header included) from a .csv.zst or plain .csv file."""
-    if path.suffix == ".zst":
+    """Yield CSV rows (header included) from a zstd-compressed or plain CSV file. The format is
+    detected from the file's first bytes, not its name (a download may still end in .part)."""
+    with open(path, "rb") as probe:
+        is_zstd = probe.read(4) == ZSTD_MAGIC
+    if is_zstd:
         import zstandard
 
         fh = open(path, "rb")
@@ -93,7 +97,7 @@ def import_puzzles(db: Session, path: Path, batch_size: int = 5000, limit: int |
     job = ImportJob(source=str(path))
     db.add(job)
     db.commit()
-    rows = open_rows(path)
+    rows = open_rows(path)  # closed in `finally`, so the file can be deleted right after (Windows)
     try:
         header = next(rows)
         if [h.strip().lstrip("﻿") for h in header[:8]] != EXPECTED_HEADER[:8]:
@@ -124,9 +128,14 @@ def import_puzzles(db: Session, path: Path, batch_size: int = 5000, limit: int |
         job.message = str(exc)[:2000]
         raise
     finally:
+        rows.close()
         job.finished_at = utcnow()
         db.add(job)
         db.commit()
+    if job.status == "done":
+        from .puzzles import theme_counts
+
+        theme_counts(db, refresh=True)
     return job
 
 

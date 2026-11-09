@@ -26,6 +26,19 @@ def win_pct(cp: int) -> float:
     return 50 + 50 * (2 / (1 + math.exp(-0.00368208 * cp)) - 1)
 
 
+def threat_gain(best_cp: int, best_mate: int | None, null_cp: int, null_mate: int | None) -> int:
+    """How much the opponent gains if they could move twice (null-move probe), in their favour.
+    best_* = Stockfish's score for the side to move now; null_* = the opponent's score in the
+    null-move position. Mate scores are handled explicitly so a forced mate for either side is
+    not mistaken for a hundred-pawn "threat"."""
+    if null_mate is not None and null_mate > 0:
+        return MATE_CP  # they would deliver mate
+    if best_mate is not None and best_mate > 0:
+        return 0  # we mate first: nothing they could do matters
+    clamp = lambda x: max(-1500, min(1500, x))  # noqa: E731
+    return clamp(best_cp) + clamp(null_cp)
+
+
 def score_to_cp(score: chess.engine.PovScore, pov: chess.Color) -> int:
     return score.pov(pov).score(mate_score=MATE_CP)
 
