@@ -132,9 +132,41 @@ def wait_ready(url: str, alive, timeout: float = 30) -> bool:
     return False
 
 
+def enable_zoom_keys(edgechromium=None) -> bool:
+    """Ctrl + / Ctrl - / Ctrl 0 zoom on Windows. pywebview (6.x) turns WebView2's "browser
+    accelerator keys" off unless debug=True, and the zoom keys are among them, so zoomable=True
+    alone only gives Ctrl + mouse wheel. Turn them back on once WebView2 is ready (this also brings
+    back Ctrl+F find and F5 reload); DevTools and the default context menu have their own settings
+    and stay off. Best effort: if pywebview changes, the window still opens."""
+    if edgechromium is None:
+        if os.name != "nt":
+            return False
+        try:
+            from webview.platforms import edgechromium
+        except Exception:
+            return False
+    ready = getattr(getattr(edgechromium, "EdgeChrome", None), "on_webview_ready", None)
+    if ready is None or getattr(ready, "aura_zoom_keys", False):
+        return False
+
+    def on_webview_ready(self, sender, args):
+        ready(self, sender, args)
+        try:
+            if args.IsSuccess:
+                sender.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = True
+        except Exception as exc:  # pragma: no cover - Windows only
+            print(f"zoom keys not enabled: {exc}", file=sys.stderr)
+
+    on_webview_ready.aura_zoom_keys = True
+    edgechromium.EdgeChrome.on_webview_ready = on_webview_ready
+    return True
+
+
 def run_window(url: str, bg: str) -> int:
     try:
         import webview
+
+        enable_zoom_keys()
 
         # text_select: PGNs, FENs and explanations must be selectable; zoomable: Ctrl + / - like a browser
         webview.create_window(APP_NAME, url, width=1440, height=920, min_size=(380, 600), background_color=bg,

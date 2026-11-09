@@ -184,3 +184,53 @@ def test_launcher_headless(tmp_path):
     finally:
         p.terminate()
         p.wait(10)
+
+
+def _load_launcher():
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[2] / "desktop" / "aura.py"
+    spec = importlib.util.spec_from_file_location("aura_launcher", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_zoom_keys_are_turned_back_on_after_pywebview_sets_up_webview2():
+    """pywebview switches WebView2's browser accelerator keys off (they include Ctrl + / Ctrl -);
+    the launcher turns them back on right after pywebview's own set-up, once, on success only."""
+    import types
+
+    aura = _load_launcher()
+
+    class EdgeChrome:  # stand-in for webview.platforms.edgechromium.EdgeChrome
+        def on_webview_ready(self, sender, args):
+            sender.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = False  # what pywebview does
+
+    def sender():
+        settings = types.SimpleNamespace(AreBrowserAcceleratorKeysEnabled=None)
+        return types.SimpleNamespace(CoreWebView2=types.SimpleNamespace(Settings=settings))
+
+    fake = types.SimpleNamespace(EdgeChrome=EdgeChrome)
+    assert aura.enable_zoom_keys(fake) is True
+    assert aura.enable_zoom_keys(fake) is False  # never wrapped twice
+    ok, failed = sender(), sender()
+    EdgeChrome().on_webview_ready(ok, types.SimpleNamespace(IsSuccess=True))
+    EdgeChrome().on_webview_ready(failed, types.SimpleNamespace(IsSuccess=False))
+    assert ok.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled is True
+    assert failed.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled is False
+    assert aura.enable_zoom_keys(types.SimpleNamespace()) is False  # a pywebview without the hook: no-op
+
+
+def test_pywebview_still_has_the_hook_the_launcher_wraps():
+    """If a pywebview upgrade renames on_webview_ready or stops setting the accelerator keys there,
+    this fails, instead of Ctrl + / Ctrl - silently breaking again."""
+    import importlib.util
+
+    spec = importlib.util.find_spec("webview")
+    if spec is None or not spec.submodule_search_locations:
+        pytest.skip("pywebview is not installed (desktop/requirements-desktop.txt)")
+    src = (Path(list(spec.submodule_search_locations)[0]) / "platforms" / "edgechromium.py").read_text(encoding="utf-8")
+    assert "def on_webview_ready(self, sender, args)" in src
+    assert "+= self.on_webview_ready" in src
+    assert "AreBrowserAcceleratorKeysEnabled" in src

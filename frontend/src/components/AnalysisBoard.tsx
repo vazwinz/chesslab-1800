@@ -67,6 +67,7 @@ export default function AnalysisBoard({ startFen, initialMoves = [], initialCurs
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest("input, textarea, select")) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // Ctrl+F is find, not "flip the board"
       if (e.key === "ArrowLeft") { e.preventDefault(); go(cursor - 1); }
       if (e.key === "ArrowRight") { e.preventDefault(); go(cursor + 1); }
       if (e.key === "Home") go(0);

@@ -301,6 +301,7 @@ function Session() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest("input, textarea, select, [role=dialog]")) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // Ctrl+A selects text, it doesn't open the analysis
       if (view === "analysis") {
         if (e.key === "Escape") setView("play");
         return;

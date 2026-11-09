@@ -242,6 +242,7 @@ function Review({ id }: { id: number }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest("input, textarea, select")) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // Alt+← is "back", not "previous move"
       if (e.key === "ArrowLeft") { e.preventDefault(); go(cursor - 1); }
       if (e.key === "ArrowRight") { e.preventDefault(); go(cursor + 1); }
     };
