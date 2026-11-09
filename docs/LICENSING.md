@@ -11,9 +11,9 @@
 | react-chessboard | MIT | Board rendering | Keep the copyright notice. |
 | React, Vite, Tailwind CSS, Recharts, Zustand, FastAPI, SQLAlchemy, Pydantic, Uvicorn, zstandard | MIT / BSD / Apache-2.0 | Framework code | Keep the notices (they ship in `node_modules` / site-packages). |
 
-## ChessLab's own licence
+## ChessLab / AURA licence
 
-No licence file has been chosen yet. That is the repository owner's decision. For personal, private use it doesn't matter. If you publish or distribute ChessLab, the backend imports python-chess, so pick a GPL-3.0-compatible licence. GPL-3.0 itself is the simplest choice.
+GPL-3.0 (`LICENSE`), chosen when the installer for sharing with friends was added. Distributing the app with Stockfish and python-chess inside requires a GPL-3.0-compatible licence anyway. When you share the installer, also share where the source is (the repo, or the source zip). The installer shows `desktop/LICENSE-NOTICE.txt`.
 
 ## Data you import
 

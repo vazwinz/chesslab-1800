@@ -1,0 +1,21 @@
+AURA (ChessLab 1800) - chess training app
+
+AURA bundles third-party software:
+
+* Stockfish chess engine - GNU General Public License v3.0
+  https://stockfishchess.org  -  source: https://github.com/official-stockfish/Stockfish
+* python-chess - GNU General Public License v3.0
+  https://github.com/niklasf/python-chess
+* Qt / PyQt (Linux builds only), React, FastAPI, SQLAlchemy and other
+  libraries under their own open-source licences (MIT, BSD, Apache-2.0, LGPL).
+
+Because AURA includes GPL-3.0 components, AURA itself is distributed under the
+GNU General Public License v3.0. You may use, share and modify it; if you
+share it, the source code must be available. Source code of this AURA build:
+https://github.com/vazwinz/chesslab-1800
+
+Puzzles are downloaded from the Lichess puzzle database (lichess.org), released
+under CC0. AURA is not affiliated with Lichess, Chess.com or the Stockfish team.
+
+This program comes with ABSOLUTELY NO WARRANTY.
+Full GPL-3.0 text: https://www.gnu.org/licenses/gpl-3.0.txt

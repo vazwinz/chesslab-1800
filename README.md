@@ -18,8 +18,10 @@ AURA is ChessLab packaged as a normal desktop program: double-click it, a window
 
 | | Build it yourself | Or let GitHub build it |
 |---|---|---|
-| Windows | `powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1` creates `desktop\dist\AURA\AURA.exe` plus Desktop and Start-menu shortcuts | Actions → **desktop** → Run workflow → download `AURA-Windows` |
+| Windows | `powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1` creates **`desktop\dist\AURA-Setup-<version>.exe`** (installer) and a portable zip | Actions → **desktop** → Run workflow → download `AURA-Windows` (contains `AURA-Setup-*.exe`) |
 | Linux | `bash desktop/build_linux.sh` creates `desktop/dist/AURA/AURA`, a menu entry "AURA" and an `aura` command | Same workflow → `AURA-Linux` |
+
+**Sharing with friends:** send them `AURA-Setup-<version>.exe`. They run it, click Next and Install, and get a Start-menu and desktop shortcut. No admin rights are needed, and it can be removed from "Apps & features". Because the app isn't code-signed, Windows SmartScreen shows a warning: they click *More info → Run anyway*. AURA is GPL-3.0 (see `LICENSE`), so share the source link along with it.
 
 You need Python 3.11+ and Node 18+ for the build only, not to run the app. The window uses Edge WebView2 on Windows (built into Windows 10/11) and Qt WebEngine on Linux. On Ubuntu/Debian, if the window doesn't open, install `sudo apt install libxcb-cursor0`. If the window still fails, AURA opens in your browser instead. For development without packaging, run `python desktop/aura.py`.
 

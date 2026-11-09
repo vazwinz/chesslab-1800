@@ -1,7 +1,7 @@
 # Build the AURA desktop app on Windows. From the repo root:
 #   powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1
 #   (add -StockfishFrom "C:\path\stockfish.exe" to reuse a binary you already have)
-param([string]$StockfishFrom = "", [string]$Variant = "sse41-popcnt", [switch]$NoShortcuts)
+param([string]$StockfishFrom = "", [string]$Variant = "sse41-popcnt", [switch]$NoShortcuts, [string]$Version = "0.3.0")
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
@@ -19,7 +19,29 @@ elseif (-not (Test-Path "desktop\stockfish_bin\stockfish.exe")) { & $vpy desktop
 & $vpy -m PyInstaller desktop\aura.spec --noconfirm --distpath desktop\dist --workpath desktop\build
 Compress-Archive -Path desktop\dist\AURA -DestinationPath desktop\dist\AURA-windows-x64.zip -Force
 
-if ($NoShortcuts) { Write-Host "Built: desktop\dist\AURA\AURA.exe"; exit 0 }
+# Installer (NSIS). Installs per user, no admin needed; shortcuts + entry in "Apps & features".
+function Find-MakeNsis {
+  $c = Get-Command makensis -ErrorAction SilentlyContinue
+  if ($c) { return $c.Source }
+  foreach ($p in @("${env:ProgramFiles(x86)}\NSIS\makensis.exe", "$env:ProgramFiles\NSIS\makensis.exe")) { if (Test-Path $p) { return $p } }
+  return $null
+}
+$nsis = Find-MakeNsis
+if (-not $nsis -and (Get-Command winget -ErrorAction SilentlyContinue)) {
+  Write-Host "Installing NSIS (installer builder) with winget..."
+  winget install -e --id NSIS.NSIS --silent --accept-package-agreements --accept-source-agreements | Out-Null
+  $nsis = Find-MakeNsis
+}
+if ($nsis) {
+  Push-Location desktop
+  & $nsis "/DVERSION=$Version" installer.nsi
+  Pop-Location
+  Write-Host "Installer: desktop\dist\AURA-Setup-$Version.exe  <- send this one to your friends" -ForegroundColor Green
+} else {
+  Write-Host "NSIS not found: install it from https://nsis.sourceforge.io to also get AURA-Setup.exe (the zip works anyway)." -ForegroundColor Yellow
+}
+
+if ($NoShortcuts -or $nsis) { exit 0 }
 # Start-menu + desktop shortcuts pointing at the built app
 $target = (Resolve-Path "desktop\dist\AURA\AURA.exe").Path
 $shell = New-Object -ComObject WScript.Shell
