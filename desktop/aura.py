@@ -10,9 +10,10 @@ it opens your default browser instead. Data lives in your user profile, not next
     --browser   open in the default browser instead of a window
     --headless  only run the server (prints the URL), for testing
 
-Start-up order: one instance only (Windows) -> database migrations (with a backup first) ->
-server -> window. A failure in any step is shown in a native dialog, in Portuguese, with the
-path of the log file; it never leaves a half-open window behind.
+Start-up order: one instance only, and not while an in-place update installs (Windows) ->
+database migrations (with a backup first) -> server -> window. A failure in any step is shown
+in a native dialog, in Portuguese, with the path of the log file; it never leaves a half-open
+window behind. "Atualizar agora" closes the app through AppQuitter (window, then server).
 """
 from __future__ import annotations
 
@@ -33,6 +34,8 @@ APP_NAME = "AURA"
 FROZEN = getattr(sys, "frozen", False)
 BUNDLE = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 MUTEX_NAME = "Local\\AURA-ChessLab1800"  # the installer checks this name too
+# held by the in-app updater (backend/app/services/update_helpers/apply_update.ps1) while it installs
+UPDATE_MUTEX_NAME = "Local\\AURA-ChessLab1800-update"
 LIGHT_BG, DARK_BG = "#F3F5F8", "#14181F"   # the app's page colour in each theme
 
 
@@ -89,6 +92,38 @@ def single_instance():
     if k32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
         return None
     return handle
+
+
+def update_in_progress(name: str = UPDATE_MUTEX_NAME) -> bool:
+    """True while "Atualizar agora" replaces the program files (Windows): starting now would hold
+    files the installer has to replace."""
+    if os.name != "nt":
+        return False
+    import ctypes
+
+    k32 = ctypes.windll.kernel32
+    handle = k32.OpenMutexW(0x00100000, False, name)  # SYNCHRONIZE
+    if handle:
+        k32.CloseHandle(handle)
+        return True
+    return False
+
+
+class AppQuitter:
+    """How the backend closes AURA for an in-place update (registered with app.services.updater):
+    the window process first, then the server; main() then returns without the browser fallback."""
+
+    def __init__(self, server):
+        self.server = server
+        self.window: subprocess.Popen | None = None
+        self.requested = threading.Event()
+
+    def __call__(self) -> None:
+        self.requested.set()
+        w = self.window
+        if w is not None and w.poll() is None:
+            w.terminate()
+        self.server.should_exit = True
 
 
 def system_dark() -> bool:
@@ -207,6 +242,9 @@ def main() -> int:
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     log = logging.getLogger("aura")
 
+    if update_in_progress():
+        message_box("O AURA está sendo atualizado e abre sozinho em alguns segundos.", error=False)
+        return 0
     lock = single_instance()
     if lock is None:
         message_box("O AURA já está aberto. Procure a janela dele na barra de tarefas.", error=False)
@@ -227,10 +265,13 @@ def main() -> int:
     import uvicorn
 
     from app.main import app  # imported after env is configured
+    from app.services import updater
 
     port = args.port or free_port()
     url = f"http://127.0.0.1:{port}"
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", log_config=None))
+    quitter = AppQuitter(server)
+    updater.set_quit_hook(quitter)  # "Atualizar agora" closes the app through this
     t = threading.Thread(target=server.run, daemon=True)
     t.start()
     if not wait_ready(url, t.is_alive):
@@ -258,8 +299,11 @@ def main() -> int:
         bg = window_background(url)
         base = [sys.executable] if FROZEN else [sys.executable, str(Path(__file__).resolve())]
         started = time.time()
-        rc = subprocess.call(base + ["--window", url, "--bg", bg])
-        if rc == 0:
+        quitter.window = subprocess.Popen(base + ["--window", url, "--bg", bg])
+        if quitter.requested.is_set():  # closed for an update before the window existed
+            quitter.window.terminate()
+        rc = quitter.window.wait()
+        if rc == 0 or quitter.requested.is_set():
             stop()
             return 0
         log.warning("native window failed (exit %s after %.1fs); falling back to the browser", rc, time.time() - started)

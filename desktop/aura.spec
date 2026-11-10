@@ -18,6 +18,9 @@ if sf.exists():
 for f in sorted((APP_DIR / "migrations").rglob("*")):
     if f.is_file() and "__pycache__" not in f.parts and f.suffix in (".py", ".mako"):
         datas.append((str(f), str(Path("app") / f.parent.relative_to(APP_DIR))))
+# the in-place updater's helper scripts, also read from disk (app/services/updater.py copies one out)
+for f in sorted((APP_DIR / "services" / "update_helpers").glob("apply_update.*")):
+    datas.append((str(f), str(Path("app") / "services" / "update_helpers")))
 datas += collect_data_files("webview")
 
 hidden = (collect_submodules("app") + collect_submodules("uvicorn") + collect_submodules("webview")

@@ -23,6 +23,12 @@ log = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()  # runs the migrations; puzzle import is separate (Configurações / scripts/import_puzzles.py)
+    try:  # what an in-place update left in the data folder (never stops the app from starting)
+        from .services import updater
+
+        updater.cleanup()
+    except Exception:
+        log.exception("update cleanup failed")
     yield
     from .services.engine import close_all
 

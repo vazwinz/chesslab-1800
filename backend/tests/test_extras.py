@@ -64,11 +64,16 @@ def test_update_check_offline_never_errors(client, monkeypatch):
 def test_update_check_reports_newer_release_and_caches(db, monkeypatch):
     calls = []
 
+    dl = "https://github.com/vazwinz/chesslab-1800/releases/download/v9.9.0"
+
     def fake(repo):
         calls.append(repo)
-        return {"ok": True, "latest": "9.9.0", "download_url": "https://example/AURA-Setup-9.9.0.exe",
-                "page_url": "https://example/rel", "notes": "novidades"}
+        return {"ok": True, "latest": "9.9.0", "page_url": "https://example/rel", "notes": "novidades",
+                "assets": [{"name": "AURA-Setup-9.9.0.exe", "url": f"{dl}/AURA-Setup-9.9.0.exe", "size": 1},
+                           {"name": "AURA-linux-x64.tar.gz", "url": f"{dl}/AURA-linux-x64.tar.gz", "size": 1}]}
 
+    pick = updates.pick_asset
+    monkeypatch.setattr(updates, "pick_asset", lambda assets: pick(assets, "win32", "AMD64"))
     r = updates.check(db, force=True, fetch=fake)
     assert r["available"] and r["latest"] == "9.9.0" and r["download_url"].endswith(".exe")
     r2 = updates.check(db, fetch=fake)

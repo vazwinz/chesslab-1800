@@ -1,5 +1,6 @@
-"""0.4.0 API: preferences, AI coach settings, "Explicar" coach, new-version check and the
-Portuguese vocabulary the interface shows (themes, Error DNA, interventions)."""
+"""0.4.0 API: preferences, AI coach settings, "Explicar" coach, new-version check (and, since
+0.5.0, the in-place update) and the Portuguese vocabulary the interface shows (themes, Error
+DNA, interventions)."""
 from __future__ import annotations
 
 import chess
@@ -13,7 +14,7 @@ from ..config import settings
 from ..db import get_db
 from ..i18n import PHASE, SEVERITY
 from ..models import KV, Attempt, GameMistake, Puzzle
-from ..services import coach, coach_ai, prefs, puzzles, updates
+from ..services import coach, coach_ai, prefs, puzzles, updater, updates
 from ..services.engine import EngineUnavailable, get_engine
 from ..services.explain import CATEGORY_NAMES, themes_payload
 from ..version import __version__
@@ -194,3 +195,22 @@ def coach_explain(body: ExplainIn, db: Session = Depends(get_db)):
 @router.get("/update/check")
 def update_check(force: bool = False, db: Session = Depends(get_db)):
     return updates.check(db, force=force)
+
+
+@router.post("/update/start")
+def update_start(db: Session = Depends(get_db)):
+    """ "Atualizar agora": download and check the new version, then close and reinstall."""
+    try:
+        return updater.start(db)
+    except updater.UpdateError as exc:
+        raise HTTPException(409, str(exc))
+
+
+@router.get("/update/job")
+def update_job():
+    return updater.state()
+
+
+@router.post("/update/cancel")
+def update_cancel():
+    return updater.cancel()
