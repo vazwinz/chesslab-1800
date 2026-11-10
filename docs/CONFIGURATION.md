@@ -4,7 +4,7 @@ Everyday settings (theme, board, notation, sounds, goal rating, the coach AI, up
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `CHESSLAB_DATA_DIR` | desktop app: `%LOCALAPPDATA%\AURA` (Linux `~/.local/share/aura`); dev: `backend/data` | Folder for the database, `backups/`, `secrets.json`, `aura.log` and the window's browser profile. |
+| `CHESSLAB_DATA_DIR` | desktop app: `%LOCALAPPDATA%\AURA` (Linux `~/.local/share/aura`); dev: `backend/data` | Folder for the database, `backups/`, `secrets.json`, `aura.log`, the window's browser profile and `update/` ("Atualizar agora": the download while it happens, the helper's `update.log` and the report of an update that failed). |
 | `DATABASE_URL` | `sqlite:///<data dir>/chesslab.db` | SQLAlchemy URL. PostgreSQL (`postgresql+psycopg://user:pw@host/db`, needs `pip install psycopg[binary]`) is supported by SQLAlchemy but **untested** here. |
 | `STOCKFISH_PATH` | the bundled binary, else `stockfish` on PATH, else `/usr/games/stockfish` | Full path to the Stockfish executable (Windows: the `.exe`). |
 | `ENGINE_DEPTH` | `16` | Default search depth for analysis requests. |
@@ -15,7 +15,8 @@ Everyday settings (theme, board, notation, sounds, goal rating, the coach AI, up
 | `GAME_ANALYSIS_DEPTH` | `12` | Depth used to analyse imported games (higher = slower, more precise Error DNA). |
 | `COACH_DEPTH` | `18` | Depth of the Stockfish facts behind "Explicar" (rules and AI both start from them). |
 | `CHESSLAB_PLAYER_NAMES` | empty | Your usernames (comma separated) to detect your colour in PGNs. Normally set in the app. |
-| `AURA_UPDATE_REPO` | `vazwinz/chesslab-1800` | Public GitHub repository whose latest Release announces new versions. Empty = never check. |
+| `AURA_UPDATE_REPO` | `vazwinz/chesslab-1800` | Public GitHub repository whose latest Release announces new versions. Empty = never check. "Atualizar agora" only downloads files of that repository's releases. |
+| `AURA_UPDATE_API` | `https://api.github.com` | For testing the update notice and "Atualizar agora" against a local stand-in of GitHub's Releases API. When it is set, files are downloaded only from under that address. |
 | `ALLOWED_HOSTS` | `127.0.0.1,localhost,::1,testserver` | Host headers the server answers to. Anything else gets 400 (protection against DNS rebinding). |
 | `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Allowed origins for the Vite dev server. Writes from any other origin are refused. |
 | `FRONTEND_DIST` | `frontend/dist` | Built frontend served by FastAPI. |
