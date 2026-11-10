@@ -46,7 +46,14 @@ AURA is packaged as a normal desktop program: double-click it, a window opens, a
 | Windows | `powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1` creates **`desktop\dist\AURA-Setup-<version>.exe`** (installer) and a portable zip. The version comes from `backend/app/version.py` | Actions → **desktop** → Run workflow → download `AURA-Windows` |
 | Linux | `bash desktop/build_linux.sh` creates `desktop/dist/AURA/AURA`, a menu entry "AURA" and an `aura` command | Same workflow → `AURA-Linux` |
 
-**Updating:** run the new `AURA-Setup-<version>.exe` over the old one (close AURA first; the installer asks). Your data lives in another folder and is migrated automatically on the next start; a copy of the database is saved first in `%LOCALAPPDATA%\AURA\backups` (the 5 newest are kept).
+**Updating:** with the installer, run the new `AURA-Setup-<version>.exe` over the old one (close AURA first; the installer asks). If you built AURA from this repository, one command pulls the new code, builds it and swaps the installed app:
+
+| | From the project folder |
+|---|---|
+| Windows | `powershell -ExecutionPolicy Bypass -File desktop\update_windows.ps1` builds the installer (or reuses one already built for this code), closes AURA, uninstalls the old version silently (the silent uninstaller always keeps your data) and installs the new one in the same folder, then opens it. `-DryRun` only shows what it would do, `-Rebuild` forces a new build, `-NoStart` leaves AURA closed. |
+| Linux | `bash desktop/update_linux.sh` builds the app, replaces `~/.local/opt/aura` only if the build succeeded and restarts AURA. `DRY_RUN=1` and `NO_START=1` work as on Windows. |
+
+Either way your data lives in another folder and is migrated automatically on the next start; a copy of the database is saved first in the data folder's `backups` (the 5 newest are kept).
 
 **Uninstalling** removes only AURA's own files, never the whole folder it was installed in. It asks whether to delete your training data too (default: keep).
 
