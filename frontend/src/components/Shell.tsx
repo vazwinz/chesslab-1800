@@ -5,6 +5,7 @@ import { num } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
 import Icon from "./Icon";
 import Tour from "./Tour";
+import { LastAttempt, UpdateActions, type UpdateInfo } from "./Update";
 
 const NAV: { to: string; label: string; icon: string; group: number }[] = [
   { to: "/", label: "Início", icon: "home", group: 0 },
@@ -159,10 +160,10 @@ export default function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-/** One-time notices: new version available, data migrated from the previous version. */
+/** One-time notices: new version available (with "Atualizar agora"), data migrated from the previous version. */
 function Notices() {
   const { prefs, set, ready } = usePrefs();
-  const [upd, setUpd] = useState<any>(null);
+  const [upd, setUpd] = useState<UpdateInfo | null>(null);
   const [mig, setMig] = useState<any>(null);
   useEffect(() => {
     api.get("/api/app").then((a) => setMig(a.migration)).catch(() => {});
@@ -175,14 +176,17 @@ function Notices() {
   const showUpdate = upd?.available && upd.latest !== prefs.dismissed_version;
   return (
     <div className="mx-auto max-w-[1280px]">
-      {showUpdate && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-pen/40 bg-pen/5 px-4 py-2.5">
-          <span className="font-bold">Nova versão disponível: {upd.latest}</span>
-          <span className="text-sm text-muted">Você está na {upd.current}. Instale por cima: seu progresso é mantido.</span>
-          <span className="ml-auto flex gap-2">
-            <a className="btn-primary btn-sm" href={upd.download_url} target="_blank" rel="noreferrer"><Icon name="download" size={16} />Baixar</a>
-            <button className="btn-quiet btn-sm" onClick={() => set({ dismissed_version: upd.latest })}>Agora não</button>
-          </span>
+      {showUpdate && upd && (
+        <div className="mb-4 space-y-1.5 rounded-lg border border-pen/40 bg-pen/5 px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-bold">Nova versão disponível: {upd.latest}</span>
+            <span className="text-sm text-muted">Você está na {upd.current}. {upd.install?.possible ? "Seus dados ficam onde estão." : "Instale por cima: seu progresso é mantido."}</span>
+            <span className="ml-auto">
+              <UpdateActions upd={upd} onLater={() => set({ dismissed_version: upd.latest ?? null })}
+                onStart={() => setUpd((u) => (u ? { ...u, last_attempt: null } : u))} />
+            </span>
+          </div>
+          <LastAttempt upd={upd} />
         </div>
       )}
       {mig && (

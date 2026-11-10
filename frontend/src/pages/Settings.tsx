@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Board, { BOARD_THEMES } from "../components/Board";
 import Help from "../components/Help";
 import { Bar, ErrorNote, PageHeader, Spinner, Toggle } from "../components/ui";
+import { LastAttempt, UpdateActions, type UpdateInfo } from "../components/Update";
 import { api } from "../lib/api";
 import { duration, num } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
@@ -290,7 +291,7 @@ function AiSection() {
 
 function AboutSection() {
   const [info, setInfo] = useState<any>(null);
-  const [upd, setUpd] = useState<any>(null);
+  const [upd, setUpd] = useState<UpdateInfo | null>(null);
   const [checking, setChecking] = useState(false);
   const { prefs, set } = usePrefs();
   useEffect(() => {
@@ -312,9 +313,12 @@ function AboutSection() {
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <button className="btn" onClick={check} disabled={checking}>{checking ? <Spinner label="Verificando…" /> : "Verificar agora"}</button>
         {upd && (upd.available
-          ? <a className="btn-primary" href={upd.download_url} target="_blank" rel="noreferrer">Baixar a versão {upd.latest}</a>
+          ? <><span className="text-sm font-bold">Versão {upd.latest} disponível.</span>
+              <UpdateActions upd={upd} onStart={() => setUpd((u) => (u ? { ...u, last_attempt: null } : u))} /></>
           : <span className="text-sm text-muted">{upd.ok ? "Você está na versão mais recente." : `Não deu para verificar: ${upd.error ?? "sem conexão"}.`}</span>)}
       </div>
+      {upd?.available && !upd.install?.possible && upd.install?.reason && <p className="mt-2 text-sm text-muted">{upd.install.reason}</p>}
+      {upd && <div className="mt-2"><LastAttempt upd={upd} /></div>}
       <p className="mt-6 max-w-prose text-xs text-faint">Puzzles: banco público do Lichess (CC0). Motor: Stockfish (GPL-3.0). AURA é software livre sob a GPL-3.0 e não tem ligação com o Lichess, o Chess.com ou a equipe do Stockfish.</p>
     </Section>
   );
