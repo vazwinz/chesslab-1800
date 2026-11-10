@@ -428,6 +428,32 @@ function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: L
   const myTurn = !g.over && turn === g.userColor;
   const engineColor: Color = g.userColor === "white" ? "black" : "white";
 
+  // Looking back at the moves already played (← → Home End, the buttons, a click in the move list) is
+  // view only: the game goes on underneath. The computer still answers, your clock still runs, nothing
+  // is undone, and the pieces move only in the live position. `view` = moves shown, null = live.
+  const [view, setView] = useState<number | null>(null);
+  const liveCursor = hist.length;
+  const cursor = view == null ? liveCursor : Math.min(view, liveCursor);
+  const viewing = cursor < liveCursor;
+  const shown = hist[cursor - 1];
+  const go = (c: number) => {
+    const n = Math.max(0, Math.min(liveCursor, c));
+    if (n === cursor + 1 && hist[cursor]) moveSound(hist[cursor]);
+    setView(n >= liveCursor ? null : n);
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // Alt+← is the browser's "back"
+      if (e.key === "ArrowLeft") { e.preventDefault(); go(cursor - 1); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); go(cursor + 1); }
+      else if (e.key === "Home") { e.preventDefault(); go(0); }
+      else if (e.key === "End") { e.preventDefault(); go(liveCursor); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   const finishGame = useCallback(async (end: PlayResult, moves: string[]) => {
     const cur = current();
     if (!cur || cur.over) return;
@@ -494,7 +520,7 @@ function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: L
   }, [flagged]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onMove = (uci: string) => {
-    if (!myTurn || thinking || busy.current || flagged) return false;
+    if (viewing || !myTurn || thinking || busy.current || flagged) return false;
     const fenBefore = fen;
     const r = tryMove(fenBefore, uci);
     if (!r) return false;
@@ -532,6 +558,7 @@ function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: L
 
   const askHint = async () => {
     if (!myTurn || thinking) return;
+    setView(null); // a hint is about the live position: show it
     if (hint && !hint.full) return setHint({ ...hint, full: true }); // already paid for: show the whole move
     if (g.hintsLeft <= 0) return;
     try {
@@ -563,9 +590,14 @@ function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: L
   for (const j of g.judgments) if (j.verdict === "inaccuracy" || j.verdict === "mistake" || j.verdict === "blunder") marks[j.ply] = j.verdict;
   const startTurn = g.startFen.split(" ")[1] === "b" ? "b" : "w";
   const startNumber = Number(g.startFen.split(" ")[5] || 1);
-  const ev = evalParts(g.engineEval == null ? null : engineColor === "white" ? g.engineEval : -g.engineEval);
-  const arrows = hint?.full ? [moveArrow(hint.uci, "best")!] : [];
-  const badges: Badge[] = hint && !hint.full ? [{ square: hint.uci.slice(0, 2), kind: "best" }] : [];
+  // the evaluation and the hint belong to the live position: not shown while looking back
+  const ev = evalParts(viewing || g.engineEval == null ? null : engineColor === "white" ? g.engineEval : -g.engineEval);
+  const arrows = hint?.full && !viewing ? [moveArrow(hint.uci, "best")!] : [];
+  const badges: Badge[] = hint && !hint.full && !viewing ? [{ square: hint.uci.slice(0, 2), kind: "best" }] : [];
+  const moveNo = (ply: number) => {
+    const idx = ply + (startTurn === "b" ? 1 : 0);
+    return `${startNumber + Math.floor(idx / 2)}${idx % 2 ? "…" : "."}`;
+  };
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
@@ -578,8 +610,10 @@ function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: L
         <div className="flex items-start gap-2">
           {prefs.play_show_eval && <EvalBar cp={ev.cp} mate={ev.mate} orientation={g.userColor} height={boardPx} />}
           <div key={shake} className={`min-w-0 flex-1 ${shake ? "board-shake" : ""}`}>
-            <Board fen={fen} orientation={g.userColor} onMove={onMove} interactive={myTurn && !thinking && !flagged}
-              lastMove={last ? [last.from, last.to] : null} arrows={arrows} badges={badges} reserve={250} id="play" onSize={setBoardPx} />
+            <Board fen={viewing ? (shown?.after ?? g.startFen) : fen} orientation={g.userColor} onMove={onMove}
+              interactive={!viewing && myTurn && !thinking && !flagged}
+              lastMove={viewing ? (shown ? [shown.from, shown.to] : null) : last ? [last.from, last.to] : null}
+              arrows={arrows} badges={badges} reserve={250} id="play" onSize={setBoardPx} />
           </div>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -590,6 +624,12 @@ function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: L
               {clockText(myTime)}
             </span>
           )}
+          <span className="flex items-center" role="group" aria-label="Ver os lances já jogados">
+            <button className="btn-quiet btn-sm px-2" onClick={() => go(0)} disabled={cursor === 0} aria-label="Posição inicial" title="Posição inicial (Home)"><Icon name="first" /></button>
+            <button className="btn-quiet btn-sm px-2" onClick={() => go(cursor - 1)} disabled={cursor === 0} aria-label="Lance anterior" title="Lance anterior (←)"><Icon name="back" /></button>
+            <button className="btn-quiet btn-sm px-2" onClick={() => go(cursor + 1)} disabled={!viewing} aria-label="Próximo lance" title="Próximo lance (→)"><Icon name="forward" /></button>
+            <button className="btn-quiet btn-sm px-2" onClick={() => go(liveCursor)} disabled={!viewing} aria-label="Lance atual" title="Lance atual (End)"><Icon name="last" /></button>
+          </span>
           {!g.over && (
             <span className="ml-auto flex flex-wrap gap-1">
               <button className="btn btn-sm" onClick={askHint} disabled={!myTurn || thinking || (!hint && g.hintsLeft <= 0) || !!hint?.full}
@@ -603,6 +643,17 @@ function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: L
             </span>
           )}
         </div>
+        {viewing && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-pen/40 bg-pen/5 px-3 py-2 text-sm" aria-live="polite">
+            <span>
+              {shown ? <>Você está vendo o lance {moveNo(cursor - 1)} <SanText san={shown.san} /></> : "Você está vendo a posição inicial"}, só para olhar.
+              {!g.over && <> A partida continua: {myTurn ? `é a sua vez${g.clock ? " e o seu relógio está correndo" : ""}` : "o AURA está pensando"}.</>}
+            </span>
+            <button className="btn-primary btn-sm ml-auto" onClick={() => go(liveCursor)} title="Tecla End">
+              {g.over ? "Ir para o fim" : "Voltar ao lance atual"}
+            </button>
+          </div>
+        )}
       </div>
 
       <aside className="min-w-0 space-y-5">
@@ -638,7 +689,7 @@ function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: L
         )}
         <div>
           <h3 className="mb-2 text-sm text-muted">Lances</h3>
-          <MoveList moves={hist.map((h, i) => ({ san: h.san, mark: marks[i] ?? null }))} cursor={hist.length} onJump={() => {}}
+          <MoveList moves={hist.map((h, i) => ({ san: h.san, mark: marks[i] ?? null }))} cursor={cursor} onJump={go}
             startTurn={startTurn} startNumber={startNumber} maxHeight={360} />
         </div>
       </aside>
