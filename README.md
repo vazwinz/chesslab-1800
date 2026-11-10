@@ -14,6 +14,10 @@ The whole interface is in Brazilian Portuguese. These developer docs stay in Eng
 | Engine | Stockfish (native binary, UCI), bundled in the desktop app |
 | Puzzles | Lichess puzzle database (CC0), downloaded and imported from inside the app |
 
+## What's new in 0.5.1
+
+- **Jogar: look back at the moves already played**, view only. ← → (and Home / End), the buttons under the board and a click in the move list show earlier positions. The game goes on underneath: the computer still answers, your clock still runs, nothing is undone, and the pieces move only in the live position. A line under the board says what you are looking at and whose turn it is, and "Voltar ao lance atual" (or End) brings you back. While you look back, the evaluation bar and the hint stay off. There is still no takeback.
+
 ## What's new in 0.5.0
 
 - **"Atualizar agora"**: the new-version notice (and Configurações → Sobre e atualizações) updates AURA in place. After a one-line confirmation ("O AURA vai fechar, atualizar e abrir de novo; seus dados ficam") it downloads the new version's file for your system from the GitHub Release, with progress and a way to cancel, and checks it against the release's `SHA256SUMS`: a file that does not match is deleted and never run. Then AURA closes, and a small helper waits for it to exit, installs the new version in the same folder (Windows: the installer, silently; Linux: the app folder is swapped for the new one) and opens AURA again. Your data folder is not touched. If an update does not happen, the next start says why. "Baixar" stays as the manual way, and is the only one when AURA runs from source or from the portable zip. 0.4.0 has no button, so 0.5.0 has to be installed by hand once.

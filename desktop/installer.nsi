@@ -1,5 +1,5 @@
 ﻿; Instalador do AURA para Windows (NSIS 3). Gerado pelo build_windows.ps1 depois do PyInstaller:
-;   makensis /DVERSION=0.5.0 desktop\installer.nsi
+;   makensis /DVERSION=0.5.1 desktop\installer.nsi
 ; Instala por usuário (sem precisar de administrador) em %LOCALAPPDATA%\Programs\AURA.
 ; Os dados de treino ficam em %LOCALAPPDATA%\AURA e são mantidos ao desinstalar, a não ser que
 ; a pessoa peça para apagar. Este arquivo é UTF-8 com BOM (o makensis precisa do BOM para os acentos).
@@ -13,7 +13,7 @@ Unicode true
 !include "Sections.nsh"
 
 !ifndef VERSION
-  !define VERSION "0.5.0"
+  !define VERSION "0.5.1"
 !endif
 !ifndef SRCDIR
   !define SRCDIR "dist\AURA"
