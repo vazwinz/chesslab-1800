@@ -15,10 +15,11 @@ elif [ ! -x desktop/stockfish_bin/stockfish ]; then
   else $VPY desktop/fetch_stockfish.py --variant "${VARIANT:-sse41-popcnt}"; fi
 fi
 $VPY -m PyInstaller desktop/aura.spec --noconfirm --distpath desktop/dist --workpath desktop/build
+cp desktop/aura.png desktop/dist/AURA/aura.png  # the menu entry's icon travels with the app (and with "Atualizar agora")
 tar -C desktop/dist -czf desktop/dist/AURA-linux-x64.tar.gz AURA
 if [ "${NO_INSTALL:-0}" != "1" ]; then
   APPDIR="$HOME/.local/opt/aura"; mkdir -p "$APPDIR" "$HOME/.local/share/applications" "$HOME/.local/bin"
-  rm -rf "$APPDIR"; cp -r desktop/dist/AURA "$APPDIR"; cp desktop/aura.png "$APPDIR/aura.png"
+  rm -rf "$APPDIR"; cp -r desktop/dist/AURA "$APPDIR"
   ln -sf "$APPDIR/AURA" "$HOME/.local/bin/aura"
   cat > "$HOME/.local/share/applications/aura.desktop" <<DESK
 [Desktop Entry]

@@ -1,27 +1,37 @@
 ﻿; Instalador do AURA para Windows (NSIS 3). Gerado pelo build_windows.ps1 depois do PyInstaller:
-;   makensis /DVERSION=0.4.0 desktop\installer.nsi
+;   makensis /DVERSION=0.5.0 desktop\installer.nsi
 ; Instala por usuário (sem precisar de administrador) em %LOCALAPPDATA%\Programs\AURA.
 ; Os dados de treino ficam em %LOCALAPPDATA%\AURA e são mantidos ao desinstalar, a não ser que
 ; a pessoa peça para apagar. Este arquivo é UTF-8 com BOM (o makensis precisa do BOM para os acentos).
+; O "Atualizar agora" do app roda este instalador em modo silencioso: /S /D=<a mesma pasta>.
 Unicode true
 !ifdef AMD64
   Target amd64-unicode  ; used for testing under 64-bit-only Wine
 !endif
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
+!include "Sections.nsh"
 
 !ifndef VERSION
-  !define VERSION "0.4.0"
+  !define VERSION "0.5.0"
 !endif
 !ifndef SRCDIR
   !define SRCDIR "dist\AURA"
 !endif
-!define APP "AURA"
+!ifndef APP
+  ; outro nome (makensis /DAPP=AURA-Teste) gera uma cópia de teste, com registro e atalhos à parte
+  !define APP "AURA"
+!endif
+!ifndef OUTFILE
+  !define OUTFILE "dist\AURA-Setup-${VERSION}.exe"
+!endif
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP}"
-!define MUTEX "Local\AURA-ChessLab1800"  ; criado pelo AURA enquanto está aberto (desktop/aura.py)
+!ifndef MUTEX
+  !define MUTEX "Local\AURA-ChessLab1800"  ; criado pelo AURA enquanto está aberto (desktop/aura.py)
+!endif
 
 Name "${APP}"
-OutFile "dist\AURA-Setup-${VERSION}.exe"
+OutFile "${OUTFILE}"
 InstallDir "$LOCALAPPDATA\Programs\${APP}"
 InstallDirRegKey HKCU "Software\${APP}" "InstallDir"
 RequestExecutionLevel user
@@ -66,10 +76,6 @@ VIAddVersionKey /LANG=${LANG_PORTUGUESEBR} "LegalCopyright" "GPL-3.0"
   ${Loop}
 !macroend
 
-Function .onInit
-  !insertmacro WAIT_FOR_AURA_CLOSED
-FunctionEnd
-
 Function un.onInit
   !insertmacro WAIT_FOR_AURA_CLOSED
 FunctionEnd
@@ -107,6 +113,17 @@ SectionEnd
   !insertmacro MUI_DESCRIPTION_TEXT ${SecApp} "O programa AURA, com o Stockfish incluído."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "Um atalho para abrir o AURA pela área de trabalho."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
+
+; Depois das seções, para conhecer ${SecDesktop}.
+Function .onInit
+  !insertmacro WAIT_FOR_AURA_CLOSED
+  ; No modo silencioso (o "Atualizar agora" do app) o atalho da área de trabalho fica como a pessoa
+  ; deixou: é refeito se existe, e não volta se ela o apagou ou desmarcou ao instalar.
+  ${If} ${Silent}
+  ${AndIfNot} ${FileExists} "$DESKTOP\${APP}.lnk"
+    !insertmacro UnselectSection ${SecDesktop}
+  ${EndIf}
+FunctionEnd
 
 Section "Uninstall"
   Delete "$DESKTOP\${APP}.lnk"

@@ -1,11 +1,15 @@
 # Builds the AURA desktop app for Windows and Linux.
-# Run it from the Actions tab (workflow_dispatch) or by pushing a tag like v0.4.0.
-# On a tag push it also publishes a GitHub Release with the installer: that release is what the
-# app's "Nova versão disponível" notice reads (it looks for the AURA-Setup-*.exe asset).
+# - a push to main runs the tests and the type check on both systems (no build), so the Linux-only
+#   tests (the in-app updater's sh helper) run before a version is tagged;
+# - the Actions tab (workflow_dispatch) also builds both apps, as downloadable artifacts;
+# - a tag like v0.5.0 builds both and publishes a GitHub Release with AURA-Setup-<version>.exe,
+#   AURA-linux-x64.tar.gz, AURA-windows-x64.zip and SHA256SUMS. That release is what the app's
+#   "Nova versão disponível" notice reads; "Atualizar agora" checks its download against SHA256SUMS.
 name: desktop
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags: ["v*"]
 jobs:
   build:
@@ -14,6 +18,8 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
+    env:
+      BUILD: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,24 +30,26 @@ jobs:
         shell: bash
         run: |
           python -m pip install -r backend/requirements-dev.txt
-          cd backend && python -m pytest -q   # Stockfish-dependent tests skip when no engine is installed
+          cd backend && python -m pytest -q -rs   # Stockfish-dependent tests skip when no engine is installed
       - name: Frontend typecheck
         shell: bash
         run: cd frontend && npm ci && npx tsc -b
       - name: Install NSIS (Windows)
-        if: runner.os == 'Windows'
+        if: env.BUILD == 'true' && runner.os == 'Windows'
         shell: pwsh
         run: if (-not (Test-Path "${env:ProgramFiles(x86)}\NSIS\makensis.exe")) { choco install nsis -y --no-progress }
       - name: Build (Windows)
-        if: runner.os == 'Windows'
+        if: env.BUILD == 'true' && runner.os == 'Windows'
         shell: pwsh
         run: ./desktop/build_windows.ps1 -NoShortcuts
       - name: Build (Linux)
-        if: runner.os == 'Linux'
+        if: env.BUILD == 'true' && runner.os == 'Linux'
         run: NO_INSTALL=1 bash desktop/build_linux.sh
       - uses: actions/upload-artifact@v4
+        if: env.BUILD == 'true'
         with:
           name: AURA-${{ runner.os }}
+          if-no-files-found: error
           path: |
             desktop/dist/AURA-*.zip
             desktop/dist/AURA-*.tar.gz
@@ -54,13 +62,31 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4  # version.py and the README section for the notes
       - uses: actions/download-artifact@v4
         with: { path: artifacts, merge-multiple: true }
+      - name: Check the files and write SHA256SUMS
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          grep -q "^__version__ = \"$v\"\$" backend/app/version.py || { echo "::error::backend/app/version.py is not $v"; exit 1; }
+          cd artifacts
+          ls -la
+          for f in "AURA-Setup-$v.exe" AURA-linux-x64.tar.gz AURA-windows-x64.zip; do
+            test -s "$f" || { echo "::error::$f is missing from the build"; exit 1; }
+          done
+          sha256sum AURA-* > SHA256SUMS
+          cat SHA256SUMS
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ls -la artifacts
-          gh release create "$GITHUB_REF_NAME" artifacts/* --repo "$GITHUB_REPOSITORY" \
-            --title "AURA ${GITHUB_REF_NAME#v}" \
-            --notes "Baixe o AURA-Setup-${GITHUB_REF_NAME#v}.exe e instale por cima da versão anterior: o seu progresso é mantido."
+          v="${GITHUB_REF_NAME#v}"
+          {
+            echo "**Windows:** baixe o \`AURA-Setup-$v.exe\` e instale por cima da versão anterior: o seu progresso é mantido."
+            echo "**Linux:** \`AURA-linux-x64.tar.gz\` (descompacte e rode \`AURA/AURA\`)."
+            echo "Desde a 0.5.0, o aviso de versão nova do próprio AURA tem o botão **Atualizar agora**: ele baixa, confere com o \`SHA256SUMS\` e instala sozinho."
+            echo
+            awk -v h="## What's new in $v" '$0 == h {f = 1; next} /^## / {f = 0} f' README.md
+          } > notes.md
+          cat notes.md
+          gh release create "$GITHUB_REF_NAME" artifacts/* --repo "$GITHUB_REPOSITORY" --title "AURA $v" --notes-file notes.md
