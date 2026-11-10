@@ -66,8 +66,16 @@
   :focus-visible { outline: 2px solid rgb(var(--pen)); outline-offset: 2px; border-radius: 6px; }
   ::selection { background: rgb(var(--pen) / 0.22); }
   .tnum { font-variant-numeric: tabular-nums; }
+  /* no animation when the system asks for none and Configurações › Animações follows it, or when
+     Animações is "Nunca"; "Sempre" keeps them (pieces sliding, the board shaking...) either way.
+     One iteration only, so a spinner stands still instead of flickering. */
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    :root:not([data-motion="on"]) *, :root:not([data-motion="on"]) *::before, :root:not([data-motion="on"]) *::after {
+      animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important;
+    }
+  }
+  :root[data-motion="off"] *, :root[data-motion="off"] *::before, :root[data-motion="off"] *::after {
+    animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important;
   }
 }
 
@@ -101,5 +109,6 @@
   40% { transform: translateX(8px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(3px); } }
 .board-shake { animation: board-shake 0.45s ease-in-out; }
 @media (prefers-reduced-motion: reduce) {
-  .board-shake { animation: none !important; }
+  :root:not([data-motion="on"]) .board-shake { animation: none !important; }
 }
+:root[data-motion="off"] .board-shake { animation: none !important; }

@@ -13,6 +13,7 @@ DEFAULTS: dict = {
     "show_coordinates": True,
     "show_legal_moves": True,
     "animation_ms": 180,
+    "motion": "system",         # animations: system (as the OS says) | on (even when the OS has them off) | off
     "sound": True,
     "volume": 0.7,
     "auto_next": False,         # go to the next puzzle automatically after a correct solve
@@ -43,6 +44,7 @@ CHOICES = {
     "theme": {"system", "light", "dark"},
     "board_theme": {"torneio", "grafite", "madeira", "oceano"},
     "notation": {"figurine", "letters"},
+    "motion": {"system", "on", "off"},
     "goal_time_class": {"auto", "bullet", "blitz", "rapid", "daily"},
     "play_alarm": {"forte", "leve", "desligado"},
     "play_color": {"white", "black", "random"},

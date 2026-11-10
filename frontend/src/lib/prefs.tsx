@@ -8,6 +8,7 @@ export type Prefs = {
   show_coordinates: boolean;
   show_legal_moves: boolean;
   animation_ms: number;
+  motion: "system" | "on" | "off";
   sound: boolean;
   volume: number;
   auto_next: boolean;
@@ -34,7 +35,7 @@ export type Prefs = {
 };
 
 export const DEFAULT_PREFS: Prefs = {
-  theme: "system", board_theme: "grafite", show_coordinates: true, show_legal_moves: true, animation_ms: 180,
+  theme: "system", board_theme: "grafite", show_coordinates: true, show_legal_moves: true, animation_ms: 180, motion: "system",
   sound: true, volume: 0.7, auto_next: false, notation: "figurine", tour_done: true, player_names: "",
   update_check: true, dismissed_version: null, goal_rating: 1800, goal_time_class: "auto", chesscom_username: "",
   arrows_best: true, arrows_played: true, arrows_opponent: true, arrows_others: true,
@@ -56,6 +57,15 @@ function applyTheme(theme: Prefs["theme"]) {
   }
 }
 
+/** Animations: by default they follow the system (Windows "Efeitos de animação", Linux desktop
+ *  settings), through prefers-reduced-motion in index.css. "on" keeps them even when the system has
+ *  them off, "off" removes them even when it has them on. */
+function applyMotion(motion: Prefs["motion"]) {
+  const el = document.documentElement;
+  if (motion === "on" || motion === "off") el.dataset.motion = motion;
+  else delete el.dataset.motion;
+}
+
 export function PrefsProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [ready, setReady] = useState(false);
@@ -65,6 +75,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     api.get<Prefs>("/api/prefs").then((p) => {
       setPrefs({ ...DEFAULT_PREFS, ...p });
       applyTheme(p.theme);
+      applyMotion(p.motion ?? "system");
     }).catch(() => {}).finally(() => setReady(true));
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
     const on = (e: MediaQueryListEvent) => setSystemDark(e.matches);
@@ -77,6 +88,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
   const set = useCallback(async (p: Partial<Prefs>) => {
     setPrefs((cur) => ({ ...cur, ...p }));
     if (p.theme) applyTheme(p.theme);
+    if (p.motion) applyMotion(p.motion);
     const saved = await api.put<Prefs>("/api/prefs", p);
     setPrefs({ ...DEFAULT_PREFS, ...saved });
   }, []);

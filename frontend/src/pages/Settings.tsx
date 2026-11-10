@@ -145,6 +145,16 @@ function AppearanceSection() {
               <select className="input mt-1 w-auto" value={prefs.animation_ms} onChange={(e) => set({ animation_ms: +e.target.value })}>
                 <option value={0}>Sem animação</option><option value={120}>Rápida</option><option value={180}>Normal</option><option value={280}>Lenta</option>
               </select></label>
+            <label className="block py-2"><span className="font-bold">Animações</span>
+              <select className="input mt-1 w-auto" value={prefs.motion} onChange={(e) => set({ motion: e.target.value as "system" | "on" | "off" })}>
+                <option value="system">Seguir o sistema</option><option value="on">Sempre</option><option value="off">Nunca</option>
+              </select>
+              {prefs.motion === "system" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches && (
+                <span className="mt-1 block max-w-prose text-sm text-muted">
+                  O sistema está com as animações desligadas, então o AURA também está. Escolha "Sempre" para ter as animações só no AURA.
+                </span>
+              )}
+            </label>
           </div>
         </div>
         <div className="pointer-events-none" aria-hidden><Board fen={PREVIEW_FEN} interactive={false} lastMove={["e1", "g1"]} maxSize={240} reserve={0} id="preview" /></div>
