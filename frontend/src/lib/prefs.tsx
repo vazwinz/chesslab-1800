@@ -32,6 +32,7 @@ export type Prefs = {
   play_level: number;
   play_show_eval: boolean;
   play_punish: boolean;
+  play_praise: boolean;
 };
 
 export const DEFAULT_PREFS: Prefs = {
@@ -40,7 +41,7 @@ export const DEFAULT_PREFS: Prefs = {
   update_check: true, dismissed_version: null, goal_rating: 1800, goal_time_class: "auto", chesscom_username: "",
   arrows_best: true, arrows_played: true, arrows_opponent: true, arrows_others: true,
   play_alarm: "forte", play_color: "white", play_clock: "none", play_hints: 3,
-  play_auto_level: true, play_level: 1000, play_show_eval: false, play_punish: true,
+  play_auto_level: true, play_level: 1000, play_show_eval: false, play_punish: true, play_praise: true,
 };
 
 type Ctx = { prefs: Prefs; ready: boolean; set: (p: Partial<Prefs>) => Promise<void>; dark: boolean };

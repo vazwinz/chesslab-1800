@@ -17,6 +17,7 @@ export default {
         good: c("good"),
         bad: c("bad"),
         warn: c("warn"),
+        brill: c("brill"),
       },
       fontFamily: {
         sans: ['"Atkinson Hyperlegible Next Variable"', "system-ui", "Segoe UI", "Roboto", "sans-serif"],

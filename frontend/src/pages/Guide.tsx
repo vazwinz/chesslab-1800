@@ -65,7 +65,7 @@ export default function Guide() {
         <Part id="partidas" title="Depois de cada partida">
           <ol className="list-decimal space-y-1 pl-5">
             <li>Importe a partida em <Link className="link" to="/partidas">Partidas</Link> (pelo usuário do Chess.com ou colando o PGN).</li>
-            <li>Espere a análise e abra a partida. Os seus erros aparecem marcados na lista de lances.</li>
+            <li>Espere a análise e abra a partida. Os seus erros aparecem marcados na lista de lances, e os seus lances únicos (<b>!</b>) e brilhantes (<b>!!</b>) também.</li>
             <li>Em cada erro, tente achar o lance melhor antes de olhar. Depois use <b>Explicar</b> para entender a ideia.</li>
             <li>Os erros viram exercícios no modo <b>{SESSION_KINDS.own_mistakes}</b>, para você revê-los dias depois.</li>
           </ol>
@@ -75,6 +75,7 @@ export default function Guide() {
           <p>Em <Link className="link" to="/jogar">Jogar</Link> você enfrenta o computador num nível que acompanha você: ganhou, o próximo sobe; perdeu, desce. Jogue depois do treino, para levar para a partida o que acabou de praticar.</p>
           <ul className="list-disc space-y-1 pl-5">
             <li>Cada lance seu é conferido na hora. Um erro ou uma capivarada acende o <b>vermelhão</b>, que só avisa: a partida segue, não dá para voltar o lance e o lance certo só aparece no fim. Depois de uma capivarada o computador joga o lance que pune, em qualquer nível.</li>
+            <li>Achou o lance do Stockfish? Aparece um aviso do lado do tabuleiro com um "tim". Um <b>!</b> (lance único) e um <b>!!</b> (sacrifício brilhante) têm aviso e som próprios. Dá para desligar no começo da partida.</li>
             <li>Comece do início, de uma abertura, do seu repertório, de um final, da posição antes de um erro seu ou de um FEN. Na revisão de partidas e na Análise, <b>Jogar daqui</b> começa uma partida da posição na tela.</li>
             <li>Só contam para o nível as partidas sem dica que começam do início, de uma abertura ou do repertório. As outras são treino.</li>
             <li>Toda partida vai para Partidas e é analisada: os erros entram no Error DNA e no ciclo como os das partidas importadas.</li>

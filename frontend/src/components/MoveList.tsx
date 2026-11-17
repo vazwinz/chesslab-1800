@@ -1,10 +1,12 @@
 import { useEffect, useRef } from "react";
 import { SanText } from "./ui";
 
-export type ListMove = { san: string; mark?: "inaccuracy" | "mistake" | "blunder" | null };
+export type MoveMark = "inaccuracy" | "mistake" | "blunder" | "great" | "brilliant";
+export type ListMove = { san: string; mark?: MoveMark | null };
 
-const MARK_COLOR = { inaccuracy: "text-warn", mistake: "text-[rgb(var(--warn))]", blunder: "text-bad" } as const;
-const MARK_SIGN = { inaccuracy: "?!", mistake: "?", blunder: "??" } as const;
+const MARK_COLOR: Record<MoveMark, string> = { inaccuracy: "text-warn", mistake: "text-[rgb(var(--warn))]", blunder: "text-bad",
+  great: "text-pen", brilliant: "text-brill" };
+const MARK_SIGN: Record<MoveMark, string> = { inaccuracy: "?!", mistake: "?", blunder: "??", great: "!", brilliant: "!!" };
 
 /** Moves laid out like a scoresheet: numbered rows, White and Black columns. `cursor` = number
  *  of moves played on the board (0 = start position). */
@@ -43,7 +45,7 @@ export default function MoveList({ moves, cursor, onJump, startTurn = "w", start
                     <button type="button" data-current={current} onClick={() => onJump(ply)}
                       className={`move w-full justify-start py-1 ${current ? "bg-pen/15 text-ink" : ""}`}>
                       <SanText san={m.san} />
-                      {m.mark && <span className={`ml-1 ${MARK_COLOR[m.mark]}`}>{MARK_SIGN[m.mark]}</span>}
+                      {m.mark && <span className={`ml-1 font-bold ${MARK_COLOR[m.mark]}`}>{MARK_SIGN[m.mark]}</span>}
                     </button>
                   </td>
                 );

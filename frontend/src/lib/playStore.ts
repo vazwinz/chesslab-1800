@@ -6,6 +6,7 @@ export type Judgment = {
   ply: number;
   fen_before: string;
   verdict: "best" | "good" | "inaccuracy" | "mistake" | "blunder";
+  highlight?: "brilliant" | "great" | null; // !! a sacrifice that is the best move, ! the only move that holds
   win_pct_loss: number;
   cp_loss: number;
   user_uci: string;

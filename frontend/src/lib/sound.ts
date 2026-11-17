@@ -1,7 +1,9 @@
 /** Board sounds, synthesized with the Web Audio API (no audio files, nothing copied from other
  *  sites): a short filtered-noise "tock" with a low body for a wooden piece, two for castling,
- *  a brighter double hit for captures, a soft bell for check and short chimes for results. */
-export type SoundKind = "move" | "capture" | "check" | "castle" | "promote" | "correct" | "wrong" | "illegal" | "start";
+ *  a brighter double hit for captures, a soft bell for check and short chimes for results; in "Jogar",
+ *  a small bell ("tim") when you find the best move, two for a "lance único", three for a brilliant one. */
+export type SoundKind = "move" | "capture" | "check" | "castle" | "promote" | "correct" | "wrong" | "illegal" | "start"
+  | "best" | "great" | "brilliant";
 
 let ctx: AudioContext | null = null;
 let enabled = true;
@@ -73,6 +75,26 @@ function tone(a: AudioContext, t: number, freq: number, dur: number, gain: numbe
   o.stop(t + dur + 0.02);
 }
 
+/** A small bell: a sine fundamental with the inharmonic partials of a struck bell, a 4 ms attack
+ *  and a long exponential tail. */
+function bell(a: AudioContext, t: number, freq: number, dur: number, gain: number) {
+  const out = a.createGain();
+  out.gain.setValueAtTime(0.0001, t);
+  out.gain.exponentialRampToValueAtTime(gain * volume, t + 0.004);
+  out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  out.connect(a.destination);
+  for (const [ratio, g] of [[1, 1], [2.0, 0.42], [2.76, 0.26], [5.4, 0.1]] as const) {
+    const o = a.createOscillator();
+    o.type = "sine";
+    o.frequency.value = freq * ratio;
+    const og = a.createGain();
+    og.gain.value = g;
+    o.connect(og).connect(out);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+}
+
 export function play(kind: SoundKind) {
   const a = audio();
   if (!a) return;
@@ -111,6 +133,18 @@ export function play(kind: SoundKind) {
       break;
     case "start":
       tone(a, t, 784, 0.12, 0.07, "triangle");
+      break;
+    case "best":
+      bell(a, t, 1318.5, 0.9, 0.16);
+      break;
+    case "great":
+      bell(a, t, 1318.5, 0.7, 0.15);
+      bell(a, t + 0.12, 1975.5, 1.0, 0.13);
+      break;
+    case "brilliant":
+      bell(a, t, 1318.5, 0.7, 0.15);
+      bell(a, t + 0.1, 1661.2, 0.8, 0.14);
+      bell(a, t + 0.2, 1975.5, 1.3, 0.14);
       break;
   }
 }

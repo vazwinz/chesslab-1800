@@ -6,7 +6,7 @@ import { usePrefs } from "../lib/prefs";
 import { play } from "../lib/sound";
 
 export type Hesitation = { selection_changes: number; cancelled_drags: number; piece_selections: number };
-export type Badge = { square: string; kind: "good" | "bad" | "best" };
+export type Badge = { square: string; kind: "good" | "bad" | "best" | "great" | "brilliant" };
 
 export const BOARD_THEMES: Record<string, { name: string; light: string; dark: string }> = {
   grafite: { name: "Grafite", light: "#DDE4EC", dark: "#8197B5" },
@@ -245,13 +245,14 @@ export default function Board({ fen, orientation = "white", onMove, interactive 
           {badges?.map((b) => {
             const p = pos(b.square);
             const size = Math.max(18, sq * 0.36);
-            const color = b.kind === "bad" ? "rgb(var(--bad))" : b.kind === "best" ? "rgb(var(--pen))" : "rgb(var(--good))";
+            const color = b.kind === "bad" ? "rgb(var(--bad))" : b.kind === "best" || b.kind === "great" ? "rgb(var(--pen))"
+              : b.kind === "brilliant" ? "rgb(var(--brill))" : "rgb(var(--good))";
             return (
               <span key={b.square + b.kind} aria-hidden
                 className="badge-pop pointer-events-none absolute z-20 flex items-center justify-center rounded-full text-white shadow-md"
                 style={{ left: p.x + sq - size * 0.72, top: p.y - size * 0.28, width: size, height: size, background: color,
-                  fontSize: size * 0.62, fontWeight: 800, lineHeight: 1 }}>
-                {b.kind === "bad" ? "✕" : b.kind === "best" ? "★" : "✓"}
+                  fontSize: size * (b.kind === "brilliant" ? 0.5 : 0.62), fontWeight: 800, lineHeight: 1 }}>
+                {b.kind === "bad" ? "✕" : b.kind === "best" ? "★" : b.kind === "great" ? "!" : b.kind === "brilliant" ? "!!" : "✓"}
               </span>
             );
           })}

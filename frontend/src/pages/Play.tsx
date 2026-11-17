@@ -35,6 +35,29 @@ const VERDICT: Record<string, { label: string; tone: string }> = {
   blunder: { label: "Capivarada", tone: "text-bad" },
 };
 
+/** A move worth a word: the engine's own move, a "lance único" or a brilliant sacrifice. */
+const praised = (j: Judgment) => j.verdict === "best" || !!j.highlight;
+
+const PRAISE = {
+  best: { sign: "★", title: "Você fez o melhor lance", text: "era exatamente o lance do Stockfish.", tone: "text-good", box: "border-good/40 bg-good/5" },
+  great: { sign: "!", title: "Lance único", text: "só esse lance segurava a posição, e você achou.", tone: "text-pen", box: "border-pen/40 bg-pen/5" },
+  brilliant: { sign: "!!", title: "Brilhante", text: "você entregou material e era o melhor lance.", tone: "text-brill", box: "border-brill/40 bg-brill/5" },
+} as const;
+
+/** The note beside the board when you find the best move (the bell plays with it). */
+function PraiseNote({ j }: { j: Judgment }) {
+  const p = PRAISE[j.highlight ?? "best"];
+  return (
+    <div role="status" className={`praise-in flex items-center gap-3 rounded-lg border px-3 py-2 ${p.box}`}>
+      <span aria-hidden className={`w-7 shrink-0 text-center text-xl font-black ${p.tone}`}>{p.sign}</span>
+      <div className="min-w-0">
+        <p className={`font-bold ${p.tone}`}>{p.title}</p>
+        <p className="text-sm text-muted"><SanText san={j.user_san} />: {p.text}</p>
+      </div>
+    </div>
+  );
+}
+
 function gameFrom(startFen: string, moves: string[]): Chess {
   const g = new Chess(startFen);
   for (const u of moves) g.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] || undefined });
@@ -319,6 +342,12 @@ function Setup({ st, starts, levels, onStart, initial, routine }: { st: any; sta
             options={[{ value: "none", label: "Sem relógio" }, { value: "5+3", label: "5+3" }, { value: "10+5", label: "10+5" },
               { value: "15+10", label: "15+10" }, { value: "30+0", label: "30 min" }]} />
         </Field>
+        <Field label="Aviso de melhor lance">
+          <Check checked={prefs.play_praise} onChange={(v) => void set({ play_praise: v })}>
+            Um aviso do lado do tabuleiro e um "tim" quando você acha o melhor lance
+          </Check>
+          <p className="text-xs text-muted">Com sinal próprio para o <b className="text-brill">!! brilhante</b> (um sacrifício que é o melhor lance) e o <b className="text-pen">! lance único</b> (só ele segurava a posição).</p>
+        </Field>
         <Field label="Vermelhão nos seus erros">
           <Seg label="Vermelhão" value={prefs.play_alarm} onChange={(v) => void set({ play_alarm: v })}
             options={[{ value: "forte", label: "Tela vermelha" }, { value: "leve", label: "Só a borda" }, { value: "desligado", label: "Desligado" }]} />
@@ -535,7 +564,7 @@ function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: L
     const end = outcome(gameFrom(g.startFen, moves));
     busy.current = true;
     setThinking(true);
-    api.post<any>("/api/play/judge", { fen: fenBefore, move: uci }).then((j) => {
+    api.post<any>("/api/play/judge", { fen: fenBefore, move: uci, start_fen: g.startFen, moves: g.moves }).then((j) => {
       const cur = current();
       if (!cur || cur.moves.length !== moves.length) return;
       const judged: Judgment = { ...j, ply, fen_before: fenBefore };
@@ -544,6 +573,7 @@ function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: L
       usePlay.getState().patch({ judgments: [...cur.judgments, judged], streak, bestStreak: Math.max(cur.bestStreak, streak),
         engineEval: -j.eval_after_cp });
       setLastJ(judged);
+      if (prefs.play_praise && praised(judged)) play(judged.highlight ?? "best");
       if (bad && !end && prefs.play_alarm !== "desligado") {
         setShake((x) => x + 1);
         setAlarm(judged);
@@ -587,7 +617,10 @@ function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: L
   const counts = { inaccuracy: 0, mistake: 0, blunder: 0 };
   for (const j of g.judgments) if (j.verdict in counts) counts[j.verdict as keyof typeof counts] += 1;
   const marks: Record<number, ListMove["mark"]> = {};
-  for (const j of g.judgments) if (j.verdict === "inaccuracy" || j.verdict === "mistake" || j.verdict === "blunder") marks[j.ply] = j.verdict;
+  for (const j of g.judgments) {
+    if (j.verdict === "inaccuracy" || j.verdict === "mistake" || j.verdict === "blunder") marks[j.ply] = j.verdict;
+    else if (j.highlight) marks[j.ply] = j.highlight;
+  }
   const startTurn = g.startFen.split(" ")[1] === "b" ? "b" : "w";
   const startNumber = Number(g.startFen.split(" ")[5] || 1);
   // the evaluation and the hint belong to the live position: not shown while looking back
@@ -662,7 +695,7 @@ function GameView({ levels, onAgain, onNew, refreshState, routine }: { levels: L
         ) : (
           <div className="panel space-y-3 p-4">
             <p className="text-lg font-bold" aria-live="polite">{myTurn ? (thinking ? "Conferindo o seu lance…" : "Sua vez") : "O AURA está pensando…"}</p>
-            {lastJ && (
+            {lastJ && prefs.play_praise && praised(lastJ) ? <PraiseNote key={lastJ.ply} j={lastJ} /> : lastJ && (
               <p className="text-sm">
                 <b className={VERDICT[lastJ.verdict]?.tone}>{VERDICT[lastJ.verdict]?.label}</b>
                 {lastJ.verdict === "best" ? <>: <SanText san={lastJ.user_san} /> era exatamente o lance do Stockfish.</>
@@ -710,6 +743,9 @@ function EndPanel({ levels, onAgain, onNew, routine }: { levels: Level[]; onAgai
   const sc = userScore(over.result, g.userColor);
   const sum = over.summary;
   const bad = g.judgments.filter((j) => j.verdict === "mistake" || j.verdict === "blunder");
+  const nBest = g.judgments.filter((j) => j.verdict === "best").length;
+  const nGreat = g.judgments.filter((j) => j.highlight === "great").length;
+  const nBrilliant = g.judgments.filter((j) => j.highlight === "brilliant").length;
   const worst = [...bad].sort((a, b) => b.win_pct_loss - a.win_pct_loss)[0];
   const same: StartChoice = { fen: g.startFen, label: g.startLabel, opening: g.opening, color: null, practice: g.practice };
   // the automatic level follows the result; a level you chose stays
@@ -747,6 +783,13 @@ function EndPanel({ levels, onAgain, onNew, routine }: { levels: Level[]; onAgai
           )}
         </div>
       )}
+      {g.judgments.length > 0 && (
+        <p className="text-sm">
+          <b className="text-good">★ {nBest}</b> {nBest === 1 ? "melhor lance" : "melhores lances"}
+          {nGreat > 0 && <> · <b className="text-pen">! {nGreat}</b> {nGreat === 1 ? "lance único" : "lances únicos"}</>}
+          {nBrilliant > 0 && <> · <b className="text-brill">!! {nBrilliant}</b> {nBrilliant === 1 ? "brilhante" : "brilhantes"}</>}
+        </p>
+      )}
       {bad.length > 0 ? (
         <div>
           <p className="mb-1 text-sm font-bold">Seus erros nesta partida</p>
@@ -769,7 +812,7 @@ function EndPanel({ levels, onAgain, onNew, routine }: { levels: Level[]; onAgai
         <button className="btn" onClick={() => onAgain(same, g.userColor === "white" ? "black" : "white", again)}>Trocar as cores</button>
         <button className="btn-quiet" onClick={onNew}>Nova partida</button>
       </div>
-      {sum?.game_id && <p className="text-xs text-faint">A partida foi para Partidas e está sendo analisada: os erros entram no seu Error DNA e no treino em ciclo.</p>}
+      {sum?.game_id && <p className="text-xs text-faint">A partida foi para Partidas e está sendo analisada: os erros entram no seu Error DNA e no treino em ciclo. A revisão olha mais fundo que o aviso na hora e tem a palavra final.</p>}
     </div>
   );
 }

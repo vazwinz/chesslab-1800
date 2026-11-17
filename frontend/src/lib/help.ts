@@ -58,11 +58,15 @@ export const HELP: Record<string, { title: string; text: string }> = {
   },
   game_accuracy: {
     title: "Precisão da partida",
-    text: "Nota de 0 a 100 calculada a partir de quanto cada lance seu diminuiu a chance de vitória (modelo do Lichess). Não é a mesma conta do Chess.com, então os números podem ser um pouco diferentes.",
+    text: "Nota de 0 a 100 calculada como no Lichess: a precisão de cada lance vem de quanto ele diminuiu a sua chance de vitória, e a nota da partida é a média entre a média ponderada pelos momentos tensos e a média harmônica, então uma capivarada pesa mais do que a parte dela nos lances. Não é a mesma conta do Chess.com, então os números podem ser um pouco diferentes.",
   },
   severity: {
     title: "Imprecisão, erro e capivarada",
-    text: "Classificação de cada lance pela queda na chance de vitória segundo o Stockfish: imprecisão (10 pontos ou mais), erro (20 ou mais) e capivarada (30 ou mais).",
+    text: "Classificação de cada lance pela queda na chance de vitória segundo o Stockfish, com os mesmos limites do Lichess: imprecisão (5 pontos ou mais), erro (10 ou mais) e capivarada (15 ou mais). Mate forçado tem regra própria: deixar escapar um mate ou cair num mate conta pelo que sobra da posição. O seu lance é calculado a partir da mesma posição que o melhor lance, então o lance do Stockfish nunca perde ponto por ruído da busca.",
+  },
+  highlights: {
+    title: "Melhor lance, ! e !!",
+    text: "★ melhor lance: exatamente o lance do Stockfish. ! lance único: o melhor lance quando qualquer outro perderia pelo menos 10 pontos de chance de vitória e nenhum outro mantém uma vantagem clara (não vale recaptura, sair de xeque, pegar material de graça nem mate em 1). !! brilhante: um sacrifício (o adversário pode ganhar material da peça que você moveu) que é o melhor lance, numa posição que ainda não estava ganha (ou que mantém um mate forçado) e que não fica pior depois.",
   },
   bands: {
     title: "Faixas de dificuldade",
