@@ -59,7 +59,8 @@ def game_category_rate(db: Session, category: str, before=None, after=None) -> d
     k = 0
     if ids:
         k = len(db.execute(select(GameMistake.id).where(GameMistake.game_id.in_(ids),
-                                                        GameMistake.category == category)).all())
+                                                        GameMistake.category == category,
+                                                        GameMistake.severity != "retired")).all())
     return {"rate": (k / moves) if moves else None, "errors": k, "moves": moves, "games": len(games)}
 
 

@@ -318,6 +318,15 @@ def games_analyze_pending(db: Session = Depends(get_db)):
     return game_jobs.enqueue_analysis(ids)
 
 
+@router.post("/games/reanalyze-stale")
+def games_reanalyze_stale(db: Session = Depends(get_db)):
+    """Analyse again the games analysed with older criteria (the judging changed since)."""
+    ids = game_jobs.stale_ids(db)
+    if not ids:
+        return {**game_jobs.state(), "count": 0, "message": "Todas as partidas já usam os critérios atuais."}
+    return {**game_jobs.enqueue_analysis(ids), "count": len(ids)}
+
+
 @router.post("/games/{gid}/analyze")
 def games_analyze(gid: int, depth: int | None = Query(None, ge=6, le=30),
                   user_color: Literal["white", "black"] | None = None, wait: bool = False,
@@ -348,7 +357,7 @@ def games_list(db: Session = Depends(get_db)):
              if g.played_on else None, "time_control": g.time_control, "time_class": g.time_class,
              "user_color": g.user_color, "user_elo": g.user_elo, "opponent_elo": g.opponent_elo, "source": g.source,
              "analyzed": g.analyzed, "analyzing": job.get("status") == "running" and job.get("game_id") == g.id,
-             "metrics": g.metrics} for g in gs]
+             "stale": game_jobs.is_stale(g), "metrics": g.metrics} for g in gs]
 
 
 @router.get("/games/{gid}")
@@ -358,7 +367,8 @@ def games_detail(gid: int, db: Session = Depends(get_db)):
     g = db.get(Game, gid)
     if g is None:
         raise HTTPException(404)
-    ms = db.execute(select(GameMistake).where(GameMistake.game_id == gid).order_by(GameMistake.ply)).scalars().all()
+    ms = db.execute(select(GameMistake).where(GameMistake.game_id == gid, GameMistake.severity != "retired")
+                    .order_by(GameMistake.ply)).scalars().all()
     import io
 
     pg = chess.pgn.read_game(io.StringIO(g.pgn))
@@ -371,7 +381,7 @@ def games_detail(gid: int, db: Session = Depends(get_db)):
     return {"id": g.id, "pgn": g.pgn, "white": g.white, "black": g.black, "result": g.result,
             "date": g.played_on.isoformat() if g.played_on else None, "time_control": g.time_control,
             "time_class": g.time_class, "user_elo": g.user_elo, "opponent_elo": g.opponent_elo,
-            "user_color": g.user_color, "metrics": g.metrics, "analyzed": g.analyzed,
+            "user_color": g.user_color, "metrics": g.metrics, "analyzed": g.analyzed, "stale": game_jobs.is_stale(g),
             "start_fen": start, "moves_uci": ucis, "moves_san": sans,
             "mistakes": [{"id": m.id, "ply": m.ply, "fen": m.fen_before, "move": m.move_san, "move_uci": m.move_uci,
                           "best": m.best_san, "best_uci": m.best_uci, "cp_loss": m.cp_loss,

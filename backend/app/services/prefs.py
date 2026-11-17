@@ -39,6 +39,7 @@ DEFAULTS: dict = {
     "play_level": 1000,         # the level when it does not
     "play_show_eval": False,    # evaluation bar during the game
     "play_punish": True,        # after your blunder the computer always plays the move that punishes it
+    "play_praise": True,        # a note and a small bell when you find the best move (!! and ! too)
 }
 CHOICES = {
     "theme": {"system", "light", "dark"},

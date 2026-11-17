@@ -17,11 +17,12 @@ from sqlalchemy.orm import Session
 
 from ..i18n import COLOR, SEVERITY, piece_name
 from ..models import EngineCache
-from .engine import MATE_CP, StockfishService, classify_loss, threat_gain, win_pct
+from .engine import MATE_CP, StockfishService, threat_gain, win_pct
+from .judgement import best_lines, classify_move, line_of
 from .explain import NOT_AN_IDEA, THEMES
 from .tactics import VALUE, describe_material, en_prise, material_change, move_facts
 
-VERSION = "coach-v2"
+VERSION = "coach-v3"  # v3: verdicts from judgement (Lichess thresholds, mates, same-root search)
 THREAT_CP = 150          # a probe gain below this is not reported as a threat
 ONLY_MOVE_GAP = 150      # best is this much better than the 2nd line → "practically the only good move"
 CLOSE_GAP = 30           # alternatives within this margin are "about as good"
@@ -84,7 +85,10 @@ def _null_board(board: chess.Board) -> chess.Board:
 def gather(engine: StockfishService, board: chess.Board, depth: int, user_move: chess.Move | None = None,
            also_eval: list[chess.Move] | None = None) -> Gathered:
     stm_white = board.turn == chess.WHITE
-    top = engine.analyse(board, depth=depth, multipv=3)
+    top = best_lines(engine, board, depth, 3)
+    user_line = None
+    if user_move is not None and top:
+        top, user_line = line_of(engine, board, user_move, depth, top)
     g = Gathered(fen=board.fen(), engine=engine.name or "Stockfish", depth=max((l.depth for l in top), default=0),
                  lines=[_line(l, stm_white) for l in top])
     if not top:
@@ -115,37 +119,30 @@ def gather(engine: StockfishService, board: chess.Board, depth: int, user_move: 
                     g.best_threat = {"san": t2[0].san, "uci": t2[0].move, "gain_cp": gain,
                                      "mate": t2[0].mate, "pv_san": t2[0].pv_san[:6], "pv_uci": t2[0].pv[:6],
                                      "after_fen": n2.fen()}
-    if user_move is not None:
-        g.user = _user_facts(engine, board, user_move, depth, top, stm_white)
+    if user_line is not None:
+        g.user = _user_facts(board, user_line, top, stm_white)
     for mv in also_eval or []:
         if mv.uci() in [l["uci"] for l in g.lines] or mv not in board.legal_moves:
             continue
-        g.extra_evals[mv.uci()] = _user_facts(engine, board, mv, depth, top, stm_white)
+        _, ml = line_of(engine, board, mv, depth, top)
+        g.extra_evals[mv.uci()] = _user_facts(board, ml, top, stm_white)
     return g
 
 
-def _user_facts(engine, board: chess.Board, mv: chess.Move, depth: int, top, stm_white: bool) -> dict:
-    after = board.copy()
-    after.push(mv)
-    reply = None
-    if after.is_checkmate():
-        user_cp, user_mate = MATE_CP, 1
-    elif after.is_game_over():
-        user_cp, user_mate = 0, None
-    else:
-        rl = engine.analyse(after, depth=depth)
-        reply = rl[0] if rl else None
-        user_cp = -(reply.cp if reply else 0)
-        user_mate = -reply.mate if reply and reply.mate is not None else None
+def _user_facts(board: chess.Board, ul, top, stm_white: bool) -> dict:
+    """A move's facts from its line, searched from the same root as the best line (judgement)."""
+    mv = chess.Move.from_uci(ul.move)
     best = top[0]
-    loss = max(0, best.cp - user_cp)
-    wl = max(0.0, win_pct(best.cp) - win_pct(user_cp))
-    return {"san": board.san(mv), "uci": mv.uci(), "cp": user_cp, "mate": user_mate,
-            "eval": eval_text(user_cp, user_mate, stm_white), "cp_loss": loss, "win_pct_loss": round(wl, 1),
-            "verdict": classify_loss(wl), "is_best": mv.uci() == best.move,
-            "in_top": mv.uci() in [l.move for l in top],
-            "reply": None if reply is None else {"san": reply.san, "uci": reply.move, "mate": reply.mate,
-                                                 "pv_san": reply.pv_san[:LINE_PLIES], "pv_uci": reply.pv[:LINE_PLIES]}}
+    reply = None
+    if len(ul.pv) > 1:
+        reply = {"san": ul.pv_san[1], "uci": ul.pv[1], "mate": -ul.mate if ul.mate is not None else None,
+                 "pv_san": ul.pv_san[1:1 + LINE_PLIES], "pv_uci": ul.pv[1:1 + LINE_PLIES]}
+    wl = max(0.0, win_pct(best.cp) - win_pct(ul.cp))
+    is_best = ul.move == best.move
+    return {"san": board.san(mv), "uci": ul.move, "cp": ul.cp, "mate": ul.mate,
+            "eval": eval_text(ul.cp, ul.mate, stm_white), "cp_loss": max(0, best.cp - ul.cp), "win_pct_loss": round(wl, 1),
+            "verdict": "good" if is_best else classify_move(best.cp, best.mate, ul.cp, ul.mate), "is_best": is_best,
+            "in_top": ul.move in [l.move for l in top], "reply": reply}
 
 
 # ------------------------------------------------------------------ the commented main line
@@ -494,4 +491,8 @@ def explain(engine: StockfishService, fen: str, move_uci: str | None = None, ctx
         except ValueError:
             pass
     g = gathered_cached(db, engine, board, depth, move, also)
+    stored = (ctx or {}).get("stored_verdict")
+    if stored and g.user:
+        # a move from a reviewed game: the label is the review's, so the list and the explanation agree
+        g = Gathered(**{**g.__dict__, "user": {**g.user, "verdict": stored, "is_best": False}})
     return build(board, g, ctx)

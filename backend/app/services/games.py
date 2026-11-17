@@ -15,8 +15,9 @@ from sqlalchemy.orm import Session
 
 from ..cognitive.error_dna import classify, engine_features, phase_of
 from ..config import settings
-from ..models import Game, GameMistake
-from .engine import StockfishService, classify_loss
+from ..models import Attempt, Game, GameMistake
+from .engine import StockfishService, win_pct
+from .judgement import CRITERIA, game_accuracy, score_move
 
 
 def _fingerprint(game: chess.pgn.Game) -> str:
@@ -140,14 +141,10 @@ def _base_increment(tc: str) -> tuple[float | None, float]:
     return float(m[1]), float(m[2] or 0)
 
 
-def move_accuracy(win_loss: float) -> float:
-    """Lichess per-move accuracy from win% loss."""
-    return max(0.0, min(100.0, 103.1668 * math.exp(-0.04354 * win_loss) - 3.1669))
-
-
 def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int | None = None,
                  should_stop=None) -> dict:
-    """Evaluate every user move; store inaccuracies/mistakes/blunders with Error DNA labels.
+    """Judge every user move (judgement.score_move); store inaccuracies/mistakes/blunders with
+    Error DNA labels, and the brilliant (!!) and only (!) moves in the metrics.
 
     All engine work happens first, without touching the database; the results are then written
     in one short transaction, so training can keep saving attempts while a game is analysed."""
@@ -158,13 +155,18 @@ def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int |
     user = chess.WHITE if game.user_color == "white" else chess.BLACK
     base, inc = _base_increment(game.time_control)
     found: list[GameMistake] = []
+    highlights: list[dict] = []
     board = pg.board()
+    plies = list(pg.mainline())
+    wins: list[float | None] = [None] * (len(plies) + 1)  # your win-% in every position, for the accuracy
+    user_moves: list[int] = []
     last_clock = {chess.WHITE: base, chess.BLACK: base}
-    losses, accs, counts = [], [], {"inaccuracy": 0, "mistake": 0, "blunder": 0}
+    losses, counts = [], {"inaccuracy": 0, "mistake": 0, "blunder": 0}
+    best_moves = 0
     phase_moves = {"opening": [0, 0.0], "middlegame": [0, 0.0], "endgame": [0, 0.0]}
     low_clock_moves = low_clock_errors = 0
     think_times: list[float] = []
-    for ply, child in enumerate(pg.mainline()):
+    for ply, child in enumerate(plies):
         move = child.move
         mover = board.turn
         clock = child.clock()
@@ -176,11 +178,12 @@ def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int |
         if mover == user and not board.is_game_over():
             if should_stop is not None and should_stop():
                 raise InterruptedError("análise cancelada")
-            f = engine_features(engine, board, move, depth)
-            wl = f.win_pct_loss or 0.0
-            cl = min(f.cp_loss or 0, 1000)
+            s = score_move(engine, board, move, depth)
+            f = engine_features(engine, board, move, depth, scored=s)
+            wins[ply], wins[ply + 1] = win_pct(s.best.cp), win_pct(s.user.cp)
+            user_moves.append(ply)
+            cl = min(s.cp_loss, 1000)
             losses.append(cl)
-            accs.append(move_accuracy(wl))
             ph = phase_of(board)
             phase_moves[ph][0] += 1
             phase_moves[ph][1] += cl
@@ -189,8 +192,14 @@ def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int |
             low_thr = max(10.0, 0.05 * base) if base else None
             if clock is not None and low_thr is not None and clock <= low_thr:
                 low_clock_moves += 1
-            sev = classify_loss(wl)
-            if sev != "good":
+            best_moves += s.verdict == "best"
+            if s.highlight:
+                highlights.append({"ply": ply, "kind": s.highlight, "san": board.san(move), "uci": move.uci(),
+                                   "eval_cp": s.user.cp, "mate": s.user.mate,
+                                   "second_san": s.top[1].san if len(s.top) > 1 else None,
+                                   "second_cp": s.top[1].cp if len(s.top) > 1 else None})
+            sev = s.verdict
+            if sev in counts:
                 counts[sev] += 1
                 if low_thr is not None and clock is not None and clock <= low_thr:
                     low_clock_errors += 1
@@ -203,33 +212,78 @@ def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int |
                 cat = classify(f, "game")
                 found.append(GameMistake(
                     game_id=game.id, ply=ply, fen_before=board.fen(), move_uci=move.uci(), move_san=board.san(move),
-                    best_uci=f.best_move or move.uci(),
-                    best_san=board.san(chess.Move.from_uci(f.best_move)) if f.best_move else board.san(move),
-                    eval_before_cp=f.best_cp or 0, eval_after_cp=f.user_cp or 0,
-                    cp_loss=f.cp_loss or 0, win_pct_loss=wl, severity=sev, clock_s=clock, think_s=think, phase=ph,
-                    category=cat, detail=f.as_dict(), pv=[]))
+                    best_uci=s.best.move, best_san=s.best.san,
+                    eval_before_cp=s.best.cp, eval_after_cp=s.user.cp,
+                    cp_loss=s.cp_loss, win_pct_loss=s.win_pct_loss, severity=sev, clock_s=clock, think_s=think,
+                    phase=ph, category=cat, detail=f.as_dict(), pv=s.best.pv[:8]))
         board.push(move)
+    if board.is_checkmate():
+        wins[-1] = 0.0 if board.turn == user else 100.0
+    elif board.is_game_over():
+        wins[-1] = 50.0
     n = len(losses)
     metrics = {
         "user_moves": n,
         "acpl": round(sum(losses) / n, 1) if n else None,
-        "accuracy": round(sum(accs) / n, 1) if n else None,
+        "accuracy": game_accuracy(_filled(wins), user_moves) if n else None,
         "inaccuracies": counts["inaccuracy"], "mistakes": counts["mistake"], "blunders": counts["blunder"],
         "blunders_per_100": round(100 * counts["blunder"] / n, 2) if n else None,
         "errors_per_100": round(100 * sum(counts.values()) / n, 2) if n else None,
+        "best_moves": best_moves,
+        "brilliant": sum(h["kind"] == "brilliant" for h in highlights),
+        "great": sum(h["kind"] == "great" for h in highlights),
+        "highlights": highlights,
         "phase_acpl": {k: (round(v[1] / v[0], 1) if v[0] else None) for k, v in phase_moves.items()},
         "low_clock_moves": low_clock_moves, "low_clock_errors": low_clock_errors,
         "median_think_s": sorted(think_times)[len(think_times) // 2] if think_times else None,
         "result_for_user": _result_for(game.result, game.user_color),
         "depth": depth,
+        "criteria": CRITERIA,
     }
-    db.query(GameMistake).filter(GameMistake.game_id == game.id).delete()
-    db.add_all(found)
+    _store_mistakes(db, game, found)
     game.metrics = metrics
     game.analyzed = True
     game.analysis_depth = depth
     db.commit()
     return metrics
+
+
+def _filled(wins: list[float | None]) -> list[float]:
+    """Positions the analysis did not evaluate (the start when you play Black, the end) take the
+    nearest known value: they only set the volatility weights of the accuracy."""
+    known = [w for w in wins if w is not None]
+    if not known:
+        return []
+    out, last = [], known[0]
+    for w in wins:
+        last = w if w is not None else last
+        out.append(last)
+    return out
+
+
+def _store_mistakes(db: Session, game: Game, found: list[GameMistake]) -> None:
+    """Replace the game's mistakes, keeping the rows that training attempts point to: the same
+    position keeps its row (updated), and a trained position that is no longer an error is
+    retired (hidden everywhere) instead of deleted."""
+    old = {m.ply: m for m in db.query(GameMistake).filter(GameMistake.game_id == game.id)}
+    used = set(db.execute(select(Attempt.game_mistake_id).where(
+        Attempt.game_mistake_id.in_([m.id for m in old.values()]))).scalars()) if old else set()
+    for new in found:
+        prev = old.pop(new.ply, None)
+        if prev is not None and prev.move_uci == new.move_uci:
+            for col in ("fen_before", "move_san", "best_uci", "best_san", "eval_before_cp", "eval_after_cp",
+                        "cp_loss", "win_pct_loss", "severity", "clock_s", "think_s", "phase", "category",
+                        "detail", "pv"):
+                setattr(prev, col, getattr(new, col))
+            continue
+        if prev is not None:
+            old[-1 - prev.id] = prev  # a different move at that ply (should not happen): handled below
+        db.add(new)
+    for prev in old.values():
+        if prev.id in used:
+            prev.severity = "retired"
+        else:
+            db.delete(prev)
 
 
 def _result_for(result: str, color: str | None) -> float | None:

@@ -74,6 +74,24 @@ def test_judge_flags_a_hung_queen_and_names_the_punishment(eng):
     assert ok["verdict"] == "best" and ok["win_pct_loss"] == 0
 
 
+@needs_engine
+def test_judge_praises_a_brilliant_sacrifice(eng):
+    j = play.judge(eng, chess.Board("5r1k/6pp/7N/3Q4/8/8/8/6K1 w - - 0 1"), chess.Move.from_uci("d5g8"))
+    assert j["verdict"] == "best" and j["highlight"] == "brilliant"
+
+
+def test_the_judge_gets_the_game_behind_the_position():
+    from app.routers.play import _with_history
+
+    before = "3r2k1/5ppp/8/8/8/4N3/5PPK/3R4 b - - 0 1"
+    now = chess.Board(before)
+    now.push_uci("d8d1")
+    h = _with_history(chess.Board(now.fen()), before, ["d8d1"])
+    assert [m.uci() for m in h.move_stack] == ["d8d1"]  # recaptures and repetitions are visible
+    other = _with_history(chess.Board(now.fen()), before, ["g8f8"])  # moves that lead elsewhere: ignored
+    assert other.move_stack == [] and other.fen() == now.fen()
+
+
 def test_a_win_raises_your_level_and_a_helped_game_does_not_count(client, no_analysis):
     st = client.get("/api/play/state").json()
     assert st["rating"] == 800 and st["games"] == 0 and st["suggested_level"] == 800

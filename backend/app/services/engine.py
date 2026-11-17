@@ -21,8 +21,8 @@ class EngineUnavailable(RuntimeError):
 
 
 def win_pct(cp: int) -> float:
-    """Lichess' centipawn → win-percentage model (side-to-move POV)."""
-    cp = max(-1500, min(1500, cp))
+    """Lichess' centipawn → win-percentage model (side-to-move POV), with its ±1000 cp ceiling."""
+    cp = max(-1000, min(1000, cp))
     return 50 + 50 * (2 / (1 + math.exp(-0.00368208 * cp)) - 1)
 
 
@@ -120,8 +120,9 @@ class StockfishService:
 
     # -- analysis --------------------------------------------------------
     def analyse(self, board: chess.Board, depth: int | None = None, movetime: float | None = None,
-                multipv: int = 1) -> list[Line]:
-        """Analyse a position. Scores are from the side-to-move's point of view."""
+                multipv: int = 1, root_moves: list[chess.Move] | None = None) -> list[Line]:
+        """Analyse a position. Scores are from the side-to-move's point of view. `root_moves` limits
+        the search to those moves (UCI searchmoves): a move's score from the same root as the best."""
         if board.is_game_over():
             return []
         depth = min(depth or settings.engine_default_depth, settings.engine_max_depth)
@@ -130,11 +131,11 @@ class StockfishService:
             limit = chess.engine.Limit(time=movetime)
         else:
             limit = chess.engine.Limit(depth=depth, time=settings.engine_max_time * 3)
-        multipv = max(1, min(multipv, 10, board.legal_moves.count()))
+        multipv = max(1, min(multipv, 10, len(root_moves) if root_moves else board.legal_moves.count()))
         with self._lock:
             eng = self._ensure()
             try:
-                infos = eng.analyse(board, limit, multipv=multipv)
+                infos = eng.analyse(board, limit, multipv=multipv, root_moves=root_moves)
             except (chess.engine.EngineTerminatedError, chess.engine.EngineError, TimeoutError) as exc:
                 try:
                     eng.close()
@@ -170,38 +171,38 @@ class StockfishService:
         return lines[0].cp if lines else 0
 
     def compare_move(self, board: chess.Board, move: chess.Move, depth: int | None = None) -> dict:
-        """Compare the user's move with the engine's best move (mover's POV)."""
-        best = self.analyse(board, depth=depth, multipv=3)
-        if not best:
-            raise ValueError("a partida já terminou nesta posição")
-        after = board.copy()
-        after.push(move)
-        user_cp = -self.evaluate(after, depth=depth)
-        best_cp = best[0].cp
-        loss = max(0, best_cp - user_cp)
-        wl = max(0.0, win_pct(best_cp) - win_pct(user_cp))
+        """Compare the user's move with the engine's best move (mover's POV), judged like
+        everywhere else (judgement.score_move)."""
+        from .judgement import score_move
+
+        s = score_move(self, board, move, depth or settings.engine_default_depth)
         return {
-            "best": best[0].as_dict(),
-            "top": [l.as_dict() for l in best],
+            "best": s.best.as_dict(),
+            "top": [l.as_dict() for l in s.top],
             "user_move": move.uci(),
             "user_san": board.san(move),
-            "user_cp": user_cp,
-            "best_cp": best_cp,
-            "cp_loss": loss,
-            "win_pct_loss": round(wl, 2),
-            "verdict": classify_loss(wl),
-            "is_best": move.uci() == best[0].move,
-            "in_top": move.uci() in [l.move for l in best],
+            "user_cp": s.user.cp,
+            "best_cp": s.best.cp,
+            "cp_loss": s.cp_loss,
+            "win_pct_loss": round(s.win_pct_loss, 2),
+            "verdict": "good" if s.verdict == "best" else s.verdict,
+            "is_best": s.verdict == "best",
+            "in_top": move.uci() in [l.move for l in s.top],
         }
 
 
+# Lichess (lila Advice.scala): a drop of 0.1 / 0.2 / 0.3 in winning chances on its -1..1 scale,
+# which is 5 / 10 / 15 points on the 0..100 win-% scale of win_pct().
+INACCURACY, MISTAKE, BLUNDER = 5.0, 10.0, 15.0
+
+
 def classify_loss(win_pct_loss: float) -> str:
-    """Lichess-style thresholds on win-percentage loss."""
-    if win_pct_loss >= 30:
+    """Verdict from the win-% loss alone (judgement.classify_move adds the forced-mate rules)."""
+    if win_pct_loss >= BLUNDER:
         return "blunder"
-    if win_pct_loss >= 20:
+    if win_pct_loss >= MISTAKE:
         return "mistake"
-    if win_pct_loss >= 10:
+    if win_pct_loss >= INACCURACY:
         return "inaccuracy"
     return "good"
 

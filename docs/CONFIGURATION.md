@@ -12,7 +12,7 @@ Everyday settings (theme, board, notation, sounds, goal rating, the coach AI, up
 | `ENGINE_MAX_TIME` | `10` | Max seconds per `movetime` request (depth searches are capped at 3× this). |
 | `ENGINE_THREADS` | `0` (automatic: half the CPU cores, at most 4) | Stockfish `Threads` for the analysis board and the coach. Puzzle checking and background game analysis use their own single-thread instances, so neither waits for the other. |
 | `ENGINE_HASH_MB` | `64` | Stockfish `Hash`. |
-| `GAME_ANALYSIS_DEPTH` | `12` | Depth used to analyse imported games (higher = slower, more precise Error DNA). |
+| `GAME_ANALYSIS_DEPTH` | `18` | Depth used to review your games (about 50 s for a 40-move game on one thread; higher = slower, more precise). Jogar judges each move live at depth 16; the review of the saved game has the last word. |
 | `COACH_DEPTH` | `18` | Depth of the Stockfish facts behind "Explicar" (rules and AI both start from them). |
 | `CHESSLAB_PLAYER_NAMES` | empty | Your usernames (comma separated) to detect your colour in PGNs. Normally set in the app. |
 | `AURA_UPDATE_REPO` | `vazwinz/chesslab-1800` | Public GitHub repository whose latest Release announces new versions. Empty = never check. "Atualizar agora" only downloads files of that repository's releases. |

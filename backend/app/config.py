@@ -43,7 +43,7 @@ class Settings:
     engine_threads: int = field(default_factory=lambda: int(os.getenv("ENGINE_THREADS", "0")))
     engine_hash_mb: int = field(default_factory=lambda: int(os.getenv("ENGINE_HASH_MB", "64")))
     # depth used when classifying mistakes in imported games (lower = faster import)
-    game_analysis_depth: int = field(default_factory=lambda: int(os.getenv("GAME_ANALYSIS_DEPTH", "12")))
+    game_analysis_depth: int = field(default_factory=lambda: int(os.getenv("GAME_ANALYSIS_DEPTH", "18")))
     # names/usernames that identify YOU in imported PGNs (comma separated)
     player_names: list[str] = field(default_factory=lambda: _list(os.getenv("CHESSLAB_PLAYER_NAMES", "")))
     cors_origins: list[str] = field(

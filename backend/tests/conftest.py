@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
+
+# The app reviews games at depth 18 (about 50 s a game); the tests that analyse whole games only
+# need the pipeline to run, so they use a shallower search unless told otherwise.
+os.environ.setdefault("GAME_ANALYSIS_DEPTH", "10")
 
 import pytest
 

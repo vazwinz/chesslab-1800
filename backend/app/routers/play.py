@@ -62,11 +62,29 @@ def play_move(body: MoveIn):
 class JudgeIn(BaseModel):
     fen: str
     move: str = Field(..., min_length=4, max_length=5)
+    start_fen: str | None = None  # with `moves`: the game so far, so the judge sees repetitions and recaptures
+    moves: list[str] = Field(default_factory=list, max_length=1000)
+
+
+def _with_history(b: chess.Board, start_fen: str | None, moves: list[str]) -> chess.Board:
+    """The position `b` with the game's moves behind it, when they lead there; else `b` alone."""
+    if not start_fen or not moves:
+        return b
+    try:
+        h = chess.Board(start_fen)
+        for u in moves:
+            mv = chess.Move.from_uci(u)
+            if mv not in h.legal_moves:
+                return b
+            h.push(mv)
+    except ValueError:
+        return b
+    return h if h.board_fen() == b.board_fen() and h.turn == b.turn else b
 
 
 @router.post("/judge")
 def play_judge(body: JudgeIn):
-    b = _board(body.fen)
+    b = _with_history(_board(body.fen), body.start_fen, body.moves)
     try:
         mv = chess.Move.from_uci(body.move)
     except ValueError:

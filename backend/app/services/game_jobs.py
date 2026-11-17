@@ -41,6 +41,20 @@ def pending_ids(db) -> list[int]:
                            .order_by(Game.played_on.desc().nulls_last(), Game.id.desc())).scalars())
 
 
+def is_stale(g: Game) -> bool:
+    """Analysed with older judging criteria (before judgement.CRITERIA): worth analysing again."""
+    from .judgement import CRITERIA
+
+    return bool(g.analyzed) and int((g.metrics or {}).get("criteria") or 1) < CRITERIA
+
+
+def stale_ids(db) -> list[int]:
+    """Analysed games whose analysis used older criteria, newest first."""
+    gs = db.execute(select(Game).where(Game.analyzed.is_(True), Game.user_color.is_not(None))
+                    .order_by(Game.played_on.desc().nulls_last(), Game.id.desc())).scalars()
+    return [g.id for g in gs if is_stale(g)]
+
+
 def _ensure_worker() -> None:
     global _worker
     if _worker is None or not _worker.is_alive():

@@ -155,6 +155,8 @@ def coach_explain(body: ExplainIn, db: Session = Depends(get_db)):
         fen, move = b.fen(), gm.move_uci
         ctx = {"kind": "partida", "user_color": b.turn, "error_category": gm.category,
                "error_category_label": DNA_INFO.get(gm.category, {}).get("name")}
+        if gm.severity in ("inaccuracy", "mistake", "blunder"):
+            ctx["stored_verdict"] = gm.severity
     else:
         if not body.fen:
             raise HTTPException(422, "Informe a posição (FEN) ou o exercício.")

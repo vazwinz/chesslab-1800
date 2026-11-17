@@ -22,7 +22,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import KV, Game, GameMistake
-from .engine import MATE_CP, StockfishService, classify_loss, win_pct
+from .engine import MATE_CP, StockfishService, win_pct
+from .judgement import score_move
 from .rating import glicko_update
 
 MIN_ELO, MAX_ELO = 400, 2500
@@ -34,7 +35,7 @@ LOG_KEY, LOG_MAX = "play_log", 400
 BOT_RD = 60.0        # the levels are approximate, so a bot's rating is not exact either
 START_RD = 300.0
 HISTORY = 60
-JUDGE_DEPTH = 12
+JUDGE_DEPTH = 16
 
 # Openings to start from (moves in SAN from the initial position).
 OPENINGS = [
@@ -103,28 +104,15 @@ def engine_move(engine: StockfishService, board: chess.Board, elo: float,
 
 
 def judge(engine: StockfishService, board: chess.Board, move: chess.Move, depth: int = JUDGE_DEPTH) -> dict:
-    """How good your move was (your point of view), the best move and the opponent's best reply."""
-    best = engine.analyse(board, depth=depth)
-    if not best:
-        raise ValueError("a partida já terminou nesta posição")
-    after = board.copy()
-    after.push(move)
-    reply = None
-    if after.is_checkmate():
-        user_cp = MATE_CP
-    elif after.is_game_over():
-        user_cp = 0
-    else:
-        rl = engine.analyse(after, depth=depth)
-        user_cp = -rl[0].cp if rl else 0
-        reply = rl[0] if rl else None
-    best_cp = best[0].cp
-    loss = max(0.0, win_pct(best_cp) - win_pct(user_cp))
-    verdict = "best" if move.uci() == best[0].move else classify_loss(loss)
-    return {"verdict": verdict, "cp_loss": max(0, best_cp - user_cp), "win_pct_loss": round(loss, 1),
-            "user_uci": move.uci(), "user_san": board.san(move), "best_uci": best[0].move, "best_san": best[0].san,
-            "eval_after_cp": user_cp, "reply_uci": reply.move if reply else None,
-            "reply_san": reply.san if reply else None}
+    """How good your move was (your point of view), the best move and the opponent's best reply.
+    Same judgement as the game review (judgement.score_move), at a depth that answers in about half
+    a second; the review of the saved game (deeper) has the last word. `board` should carry the
+    game's moves, so repetitions and "this is a recapture" are seen."""
+    s = score_move(engine, board, move, depth)
+    return {"verdict": s.verdict, "highlight": s.highlight, "cp_loss": s.cp_loss, "win_pct_loss": round(s.win_pct_loss, 1),
+            "user_uci": move.uci(), "user_san": board.san(move), "best_uci": s.best.move, "best_san": s.best.san,
+            "eval_after_cp": s.user.cp, "reply_uci": s.reply.move if s.reply else None,
+            "reply_san": s.reply.san if s.reply else None}
 
 
 # ------------------------------------------------------------------ your rating against the computer

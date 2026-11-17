@@ -76,6 +76,38 @@ def test_missed_mate_threat(eng):
 
 
 @needs_engine
+def test_a_thrown_away_mate_is_never_called_the_engine_move():
+    # MultiPV at depth 12 misses 1. Qg8+ (mate in 2): Nf5 must not come out as "the move Stockfish prefers"
+    fresh = StockfishService(threads=1, hash_mb=64, role="analysis")
+    try:
+        r = coach.explain(fresh, "5r1k/6pp/7N/3Q4/8/8/8/6K1 w - - 0 1", "h6f5", {"user_color": chess.WHITE}, depth=12)
+    finally:
+        fresh.close()
+    u = r["sections"]["user"]
+    assert not u["is_best"] and u["verdict_key"] == "blunder"
+    assert r["engine"]["lines"][0]["san"] == "Qg8+"
+
+
+@needs_engine
+def test_the_explanation_of_a_game_mistake_keeps_the_review_verdict(client):
+    from app import db as dbmod
+    from app.models import Game, GameMistake
+
+    with dbmod.SessionLocal() as s:
+        g = Game(fingerprint="x", pgn="", white="TestUser", black="Opp", result="*", user_color="black")
+        s.add(g)
+        s.flush()
+        m = GameMistake(game_id=g.id, ply=3, fen_before=HANG_QUEEN, move_uci="d8h4", move_san="Qh4", best_uci="b8c6",
+                        best_san="Nc6", eval_before_cp=-30, eval_after_cp=-700, cp_loss=670, win_pct_loss=13.0,
+                        severity="mistake", phase="opening", category="positional_misunderstanding", detail={}, pv=[])
+        s.add(m)
+        s.commit()
+        mid = m.id
+    u = client.post("/api/coach/explain", json={"game_mistake_id": mid}).json()["rules"]["sections"]["user"]
+    assert u["verdict_key"] == "mistake" and u["verdict"] == "erro"  # the list said "erro": so does the explanation
+
+
+@needs_engine
 def test_explain_endpoint_for_puzzle_attempt_and_terminal(client_with_puzzles):
     c = client_with_puzzles
     sid = c.post("/api/sessions", json={"kind": "mixed"}).json()["id"]

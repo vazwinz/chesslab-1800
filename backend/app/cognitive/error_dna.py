@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 from datetime import datetime, timedelta
 
 import chess
@@ -18,6 +19,9 @@ from sqlalchemy.orm import Session
 from ..models import Attempt, GameMistake, utcnow
 from ..models import Game
 from ..services.engine import StockfishService, threat_gain, win_pct
+
+if TYPE_CHECKING:
+    from ..services.judgement import Scored
 
 INFO = {
     "tactical_blindness": {
@@ -125,13 +129,17 @@ class DecisionFeatures:
         return {k: v for k, v in self.__dict__.items() if v is not None and v != []}
 
 
-def engine_features(engine: StockfishService, board: chess.Board, move: chess.Move, depth: int) -> DecisionFeatures:
-    """Stockfish-derived features of one decision (board = position before the user's move)."""
+def engine_features(engine: StockfishService, board: chess.Board, move: chess.Move, depth: int,
+                    scored: "Scored | None" = None) -> DecisionFeatures:
+    """Stockfish-derived features of one decision (board = position before the user's move).
+    `scored`: the move already judged by judgement.score_move (game analysis passes it)."""
+    from ..services.judgement import score_move
+
     f = DecisionFeatures(phase=phase_of(board), legal_moves=board.legal_moves.count(), user_forcing=is_forcing(board, move))
-    top = engine.analyse(board, depth=depth, multipv=3)
-    if not top:
+    if board.is_game_over():
         return f
-    best = top[0]
+    s = scored or score_move(engine, board, move, depth)
+    top, best = s.top, s.best
     f.best_move = best.move
     f.best_forcing = is_forcing(board, chess.Move.from_uci(best.move))
     if len(top) > 1:
@@ -139,17 +147,11 @@ def engine_features(engine: StockfishService, board: chess.Board, move: chess.Mo
         f.many_good_options = len(top) >= 3 and best.cp - top[2].cp <= MANY_GOOD_CP
     after = board.copy()
     after.push(move)
-    if after.is_checkmate():
-        user_cp = 10000
-        reply_lines = []
-    else:
-        reply_lines = engine.analyse(after, depth=depth)
-        user_cp = -(reply_lines[0].cp if reply_lines else 0)
-    f.best_cp, f.user_cp = best.cp, user_cp
-    f.cp_loss = max(0, best.cp - user_cp)
-    f.win_pct_loss = round(max(0.0, win_pct(best.cp) - win_pct(user_cp)), 2)
-    if reply_lines:
-        f.refutation = reply_lines[0].move
+    f.best_cp, f.user_cp = best.cp, s.user.cp
+    f.cp_loss = s.cp_loss
+    f.win_pct_loss = s.win_pct_loss
+    if s.reply is not None:
+        f.refutation = s.reply.move
         f.refutation_forcing = is_forcing(after, chess.Move.from_uci(f.refutation))
     # Null-move threat probe: what would the opponent do if it were their move now?
     if not board.is_check():
@@ -203,7 +205,7 @@ def recurring_patterns(db: Session, days: int = 90, half_life_days: float = 21.0
 
     by_cat: dict[str, dict] = defaultdict(lambda: {"count": 0, "weight": 0.0, "games": 0, "puzzles": 0,
                                                    "contexts": set(), "themes": Counter(), "phases": Counter()})
-    gm = db.execute(select(GameMistake).where(GameMistake.created_at >= since)).scalars().all()
+    gm = db.execute(select(GameMistake).where(GameMistake.created_at >= since, GameMistake.severity != "retired")).scalars().all()
     for m in gm:
         d = by_cat[m.category]
         d["count"] += 1

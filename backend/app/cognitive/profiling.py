@@ -52,7 +52,7 @@ def build_profile(db: Session, days: int = 60) -> dict:
     blind = [a for a in atts if a.mode == "blind"]
     # 3 threat detection: defensive puzzles + share of game errors that were missed threats
     defensive = [bool(a.correct) for a in atts if themes_of[a.id] & {"defensiveMove", "equality"}]
-    gm = db.execute(select(GameMistake).where(GameMistake.created_at >= since)).scalars().all()
+    gm = db.execute(select(GameMistake).where(GameMistake.created_at >= since, GameMistake.severity != "retired")).scalars().all()
     games = db.execute(select(Game).where(Game.analyzed.is_(True))).scalars().all()
     # same window for numerator and denominator: moves of the games whose mistakes are counted
     window_games = {m.game_id for m in gm} | {g.id for g in games if g.imported_at >= since}

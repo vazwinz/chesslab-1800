@@ -170,7 +170,7 @@ class GameMistake(Base):
     eval_after_cp: Mapped[int] = mapped_column(Integer)
     cp_loss: Mapped[int] = mapped_column(Integer)
     win_pct_loss: Mapped[float] = mapped_column(Float)
-    severity: Mapped[str] = mapped_column(String(12))  # inaccuracy | mistake | blunder
+    severity: Mapped[str] = mapped_column(String(12))  # inaccuracy | mistake | blunder | retired (trained, no longer an error)
     clock_s: Mapped[float | None] = mapped_column(Float, nullable=True)
     think_s: Mapped[float | None] = mapped_column(Float, nullable=True)
     phase: Mapped[str] = mapped_column(String(12))
