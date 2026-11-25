@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from ..cognitive import attention, interventions, loop, pressure, retention
 from ..cognitive.error_dna import CATEGORIES, DecisionFeatures, classify, engine_features, phase_of
 from ..models import Attempt, Game, GameMistake, InterventionAssignment, Puzzle, RatingPoint, TrainingSession, utcnow
-from . import adaptive, moments, puzzles
+from . import adaptive, moments, motifs, puzzles
 from .engine import EngineUnavailable, get_engine
 from .explain import explain
 from .rating import current_rating, expected_score, glicko_update
@@ -560,6 +560,7 @@ def finish(db: Session, a: Attempt, correct: bool, total_ms: int, hesitation: di
                     "refutation_uci": refutation, "refutation_san": _sans(gm.fen_before, refutation),
                     "best_line_uci": best_line, "best_line_san": _sans(gm.fen_before, best_line),
                     "moment_kind": kind, "moment_label": moments.KIND_LABEL[kind],
+                    "why": motifs.describe(gm.fen_before, refutation),
                     "next_in_days": moments.next_return_in(db, gm.id)})
     if a.candidates:
         out["candidates"] = _score_candidates(db, a)

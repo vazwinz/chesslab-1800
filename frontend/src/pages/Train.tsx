@@ -520,7 +520,10 @@ function Session() {
                     <span className={`chip ${result.moment_kind === "decisive" ? "border-bad/50 text-bad" : result.moment_kind === "missed" ? "border-warn/50 text-warn" : ""}`}>{result.moment_label}</span>
                   )}
                   <p>Melhor: <b><SanText san={result.best_san} /></b>. Na partida você jogou <SanText san={result.your_game_move} />.</p>
-                  {result.why && <p className="text-sm">{result.why}</p>}
+                  {result.why ? <p className="text-sm"><WhyText text={result.why} /></p>
+                    : !result.correct && (result.refutation_san?.length ?? 0) >= 2 && (
+                      <p className="text-sm">Depois de <SanText san={result.refutation_san[0]} />, ele ganha vantagem com <SanText san={result.refutation_san[1]} />.</p>
+                    )}
                   {result.time_note && <p className="text-sm font-bold text-warn">⏱ {result.time_note}</p>}
                   <p className="text-sm text-muted">{result.next_in_days == null ? "Dominado: esta posição não volta mais."
                     : result.next_in_days <= 1 ? "Volta amanhã." : `Volta em ${result.next_in_days} dias.`}</p>
@@ -602,6 +605,12 @@ function Session() {
       </aside>
     </div>
   );
+}
+
+/** A sentence from the server with its moves in [[ ]], shown in the owner's notation. */
+function WhyText({ text }: { text: string }) {
+  const parts = text.split(/\[\[(.+?)\]\]/g);
+  return <>{parts.map((p, i) => (i % 2 ? <b key={i}><SanText san={p} /></b> : <span key={i}>{p}</span>))}</>;
 }
 
 /** Days until the next spaced review, in words. */

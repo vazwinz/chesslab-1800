@@ -87,3 +87,10 @@ def test_after_the_session_with_nothing_old_left_it_says_the_session_is_done(cli
     client.post(f"/api/attempts/{ex['attempt_id']}/give-up", json={"elapsed_ms": 1000})
     r = client.post(f"/api/sessions/{sid}/next")
     assert r.status_code >= 400 and "Sessão do dia feita" in r.json()["detail"]
+
+
+def test_feedback_says_in_one_sentence_why_the_game_move_failed(client, db):
+    _seed(db, 1)
+    ex = client.post(f"/api/sessions/{_start(client)}/next").json()
+    r = client.post(f"/api/attempts/{ex['attempt_id']}/give-up", json={"elapsed_ms": 1000}).json()
+    assert r["why"] == "Depois de [[Kf1]], ele captura a dama em d1."
