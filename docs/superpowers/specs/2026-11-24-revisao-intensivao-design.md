@@ -19,7 +19,7 @@ Contexto que pesa:
 
 ## Metas
 
-1. Uma **Revisão do dia**: os 5 momentos mais valiosos das partidas do dia, de partidas diferentes e misturados, em ~10 min.
+1. O modo **"Seus erros de partida"** (o nome fica, decisão do dono) passa a começar pela **sessão do dia**: os 5 momentos mais valiosos das partidas do dia, de partidas diferentes e misturados, em ~10 min.
 2. Cada momento começa com **você tentando** achar o lance. Depois vem um toque de **"certeza ou chute?"** e a **resposta logo em seguida**, com a ideia encenada no tabuleiro.
 3. O momento **volta em 1, 3, 7 e 21 dias**, até ficar firme.
 4. O dia termina com **1 regra "se… então"** tirada do seu padrão de erro, mostrada de novo no dia seguinte.
@@ -36,7 +36,7 @@ Contexto que pesa:
 
 - a revisão do dia passar de ~12 min ou virar mais um passo arrastado na rotina;
 - mostrar a resposta antes da tentativa, ou deixar pular a tentativa por padrão;
-- a revisão do dia **empilhar** com o modo "Seus erros de partida" em vez de substituí-lo (regra do dono: substituir, não empilhar);
+- a sessão do dia virar um **modo novo ao lado** de "Seus erros de partida" em vez de morar dentro dele (regra do dono: substituir, não empilhar);
 - o app atrasar ou travar o botão Atualizar agora por causa da análise automática.
 
 ## Base científica (o porquê de cada peça)
@@ -173,11 +173,9 @@ A regra aceita aparece no Início no dia seguinte e na tela de começar partida 
 
 ### 7. Rotina e Treinar: substitui, não empilha
 
-- **Rotina:** o passo "Seus erros de partida" vira **"Revisão do dia"**. A meta passa a ser a sessão completa (5 momentos e os retornos do dia, ou 3 no dia leve), em vez de 5 posições soltas. Os testes da rotina que fixam a lista de passos mudam junto.
-  - A chave interna continua `own_mistakes`, para não quebrar os dias já planejados (o KV "routine" guarda as chaves).
-  - `routine._is_step` reconhece a linha pelo título, então tem que aceitar o título antigo e o novo. Senão os dias antigos passam a parecer blocos do plano da 0.4.0.
+- **Rotina:** o passo continua **"Seus erros de partida"**, com o mesmo nome e a mesma chave (`own_mistakes`). Assim os dias já planejados e o reconhecimento por título (`routine._is_step`) não mudam. A meta passa a ser a sessão do dia completa (5 momentos e os retornos do dia, ou 3 no dia leve), em vez de 5 posições soltas. Os testes da rotina mudam junto.
   - A contagem vira: respostas de `mode="daily_review"` no dia, contra o tamanho da sessão montada (seção 3).
-- **Treinar:** o modo "Seus erros de partida" passa a abrir a Revisão do dia. Quando ela acaba, continua com os retornos e com erros antigos nunca revisados, os mais novos primeiro (a lógica de `own_mistake_pool`), para quem quiser mais. Nada de dois modos parecidos lado a lado.
+- **Treinar:** o modo "Seus erros de partida" passa a começar pela sessão do dia. Quando ela acaba, continua com os retornos e com erros antigos nunca revisados, os mais novos primeiro (a lógica de `own_mistake_pool`), para quem quiser mais. Nada de dois modos parecidos lado a lado.
 - **Onde mora a tela:** dentro do Treinar, reaproveitando o tabuleiro e o fluxo de posição de partida que já existem. O endereço (`/treinar?modo=...`) é decisão de quem constrói.
 
 ### 8. Fase 3: antes do motor, e a revisão de uma partida
