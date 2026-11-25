@@ -54,3 +54,36 @@ def test_resume_queues_unanalysed_and_deep_pending(db):
 def test_resume_with_nothing_to_do_returns_none(db):
     _game(db, "c", True, {"deep": "done", "criteria": 2})
     assert game_jobs.resume(db) is None and not game_jobs._queue
+
+
+@pytest.fixture()
+def calls(monkeypatch):
+    seen = []
+    monkeypatch.setattr(game_jobs, "enqueue_chesscom", lambda u, m, a: seen.append((u, m, a)) or {})
+    return seen
+
+
+def test_auto_import_needs_a_username_and_the_switch(db, calls):
+    t = datetime(2026, 11, 20, 10, 0)
+    assert game_jobs.maybe_auto_import(db, now=t) is False  # no username saved
+    prefs.update_prefs(db, {"chesscom_username": "TestUser", "chesscom_auto_import": False})
+    assert game_jobs.maybe_auto_import(db, now=t) is False  # switched off
+    prefs.update_prefs(db, {"chesscom_auto_import": True})
+    assert game_jobs.maybe_auto_import(db, now=t) is True
+    assert calls == [("TestUser", 1, True)]
+
+
+def test_auto_import_at_most_once_an_hour(db, calls):
+    prefs.update_prefs(db, {"chesscom_username": "TestUser"})
+    t = datetime(2026, 11, 20, 10, 0)
+    assert game_jobs.maybe_auto_import(db, now=t) is True
+    assert game_jobs.maybe_auto_import(db, now=t + timedelta(minutes=30)) is False
+    assert game_jobs.maybe_auto_import(db, now=t + timedelta(minutes=61)) is True
+    assert len(calls) == 2
+
+
+def test_auto_import_takes_last_month_too_on_the_first_two_days(db, calls):
+    prefs.update_prefs(db, {"chesscom_username": "TestUser"})
+    game_jobs.maybe_auto_import(db, now=datetime(2026, 12, 2, 10, 0))
+    game_jobs.maybe_auto_import(db, now=datetime(2026, 12, 3, 12, 0))
+    assert [m for _, m, _ in calls] == [2, 1]

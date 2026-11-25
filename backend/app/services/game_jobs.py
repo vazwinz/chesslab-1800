@@ -8,6 +8,7 @@ import logging
 import threading
 import time
 from collections import deque
+from datetime import datetime
 
 from sqlalchemy import select
 
@@ -121,6 +122,39 @@ def enqueue_chesscom(username: str, months: int, analyze: bool) -> dict:
                            "started": time.time(), "imported": 0, "username": username})
     _ensure_worker()
     return state()
+
+
+AUTO_IMPORT_KEY = "last_auto_import"
+AUTO_IMPORT_EVERY = 3600  # seconds between two automatic Chess.com imports
+
+
+def maybe_auto_import(db, now: datetime | None = None) -> bool:
+    """Fetch the owner's new Chess.com games (this month, and last month on the first two days)
+    with both analysis passes, at most once an hour. False when there is no username, the switch
+    is off, or the last automatic import was less than an hour ago. Never raises."""
+    from . import chesscom, prefs
+    from ..models import KV
+
+    try:
+        p = prefs.get_prefs(db)
+        user = (p.get("chesscom_username") or "").strip()
+        if not user or not p.get("chesscom_auto_import", True) or not chesscom.USERNAME_RE.match(user):
+            return False
+        now = now or datetime.now()
+        kv = db.get(KV, AUTO_IMPORT_KEY)
+        last = (kv.value or {}).get("at") if kv else None
+        if last and (now - datetime.fromisoformat(last)).total_seconds() < AUTO_IMPORT_EVERY:
+            return False
+        if kv is None:
+            db.add(KV(key=AUTO_IMPORT_KEY, value={"at": now.isoformat()}))
+        else:
+            kv.value = {"at": now.isoformat()}
+        db.commit()
+        enqueue_chesscom(user, 2 if now.day <= 2 else 1, True)
+        return True
+    except Exception:
+        log.exception("automatic Chess.com import failed")
+        return False
 
 
 def cancel() -> dict:

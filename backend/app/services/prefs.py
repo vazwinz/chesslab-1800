@@ -25,6 +25,7 @@ DEFAULTS: dict = {
     "goal_rating": 1800,
     "goal_time_class": "auto",   # auto (the class you play most) | bullet | blitz | rapid | daily
     "chesscom_username": "",
+    "chesscom_auto_import": True,  # fetch your new Chess.com games when AURA opens (needs the username)
     # arrows on the analysis and review boards (each can be switched off under the board)
     "arrows_best": True,        # Stockfish's best move
     "arrows_played": True,      # the move you played, at each of your mistakes

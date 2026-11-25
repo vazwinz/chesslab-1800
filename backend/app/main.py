@@ -36,6 +36,7 @@ async def lifespan(app: FastAPI):
 
             with SessionLocal() as db:
                 game_jobs.resume(db)
+                game_jobs.maybe_auto_import(db)
         except Exception:
             log.exception("resuming the game analysis failed")
     yield
