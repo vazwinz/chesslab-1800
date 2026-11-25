@@ -59,7 +59,9 @@ def test_analysis_keeps_the_curve_think_times_and_refutation(db, eng):
     assert set(m["phase_accuracy"]) == {"opening", "middlegame", "endgame"}
     assert m["deep"] == "pending"  # depth 8 is below the review depth
     ms = db.query(GameMistake).filter(GameMistake.game_id == g.id).all()
-    assert ms and all(x.detail["refutation"][0] == x.move_uci for x in ms)
+    assert ms and all(x.detail["refutation_line"][0] == x.move_uci for x in ms)
+    # Error DNA's "refutation" is the opponent's reply, one move: the review screen draws it as an arrow
+    assert all(x.detail.get("refutation") is None or isinstance(x.detail["refutation"], str) for x in ms)
 
 
 @needs_engine

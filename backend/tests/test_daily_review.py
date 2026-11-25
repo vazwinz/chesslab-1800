@@ -21,7 +21,7 @@ def _seed(db, n: int = 2, played: date | None = None) -> list[int]:
         m = GameMistake(game_id=g.id, ply=40, fen_before=FEN, move_uci="e1f1", move_san="Kf1", best_uci="d1d2",
                         best_san="Qxd2", eval_before_cp=900, eval_after_cp=-900, cp_loss=1000, win_pct_loss=60.0,
                         severity="blunder", phase="endgame", category="missed_opponent_threat", clock_s=42.0,
-                        detail={"refutation": ["e1f1", "d2d1"]}, pv=["d1d2", "e8d7"])
+                        detail={"refutation": "d2d1", "refutation_line": ["e1f1", "d2d1"]}, pv=["d1d2", "e8d7"])
         db.add(m)
         db.flush()
         ids.append(m.id)
@@ -94,3 +94,14 @@ def test_feedback_says_in_one_sentence_why_the_game_move_failed(client, db):
     ex = client.post(f"/api/sessions/{_start(client)}/next").json()
     r = client.post(f"/api/attempts/{ex['attempt_id']}/give-up", json={"elapsed_ms": 1000}).json()
     assert r["why"] == "Depois de [[Kf1]], ele captura a dama em d1."
+
+
+def test_a_mistake_analysed_before_the_line_was_kept_still_replays(client, db):
+    """Games analysed by 0.5.2 have only Error DNA's reply (one move) in the detail."""
+    mid = _seed(db, 1)[0]
+    m = db.get(GameMistake, mid)
+    m.detail = {"refutation": "d2d1"}
+    db.commit()
+    ex = client.post(f"/api/sessions/{_start(client)}/next").json()
+    r = client.post(f"/api/attempts/{ex['attempt_id']}/give-up", json={"elapsed_ms": 1000}).json()
+    assert r["refutation_uci"] == ["e1f1", "d2d1"] and r["refutation_san"] == ["Kf1", "Qxd1+"]

@@ -161,6 +161,17 @@ def _session_exercise(db: Session, sess: TrainingSession) -> dict | None:
     return None
 
 
+def _refutation_line(gm: GameMistake) -> list[str]:
+    """Your game move and what punishes it. Analyses since the daily session keep the whole line
+    ("refutation_line"); older ones have only Error DNA's reply ("refutation", one move)."""
+    d = gm.detail or {}
+    line = d.get("refutation_line")
+    if isinstance(line, list) and line:
+        return [str(u) for u in line]
+    reply = d.get("refutation")
+    return [gm.move_uci, reply] if isinstance(reply, str) and reply else []
+
+
 def _sans(fen: str, ucis: list[str]) -> list[str]:
     """SAN of a line from a position, up to its first illegal move."""
     board, out = chess.Board(fen), []
@@ -553,7 +564,7 @@ def finish(db: Session, a: Attempt, correct: bool, total_ms: int, hesitation: di
         gm = db.get(GameMistake, a.game_mistake_id)
         g = db.get(Game, gm.game_id)
         kind = moments.kind_of((g.metrics or {}).get("wins") if g else None, gm.ply)
-        refutation = list((gm.detail or {}).get("refutation") or [])
+        refutation = _refutation_line(gm)
         best_line = list(gm.pv or [])[:6]
         out.update({"best_san": gm.best_san, "your_game_move": gm.move_san, "comparison": comparison,
                     "category": gm.category, "fen_before": gm.fen_before,

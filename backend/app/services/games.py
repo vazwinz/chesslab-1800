@@ -219,7 +219,7 @@ def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int |
                     best_uci=s.best.move, best_san=s.best.san,
                     eval_before_cp=s.best.cp, eval_after_cp=s.user.cp,
                     cp_loss=s.cp_loss, win_pct_loss=s.win_pct_loss, severity=sev, clock_s=clock, think_s=think,
-                    phase=ph, category=cat, detail={**f.as_dict(), "refutation": s.user.pv[:8]}, pv=s.best.pv[:8]))
+                    phase=ph, category=cat, detail={**f.as_dict(), "refutation_line": s.user.pv[:8]}, pv=s.best.pv[:8]))
         board.push(move)
     if board.is_checkmate():
         wins[-1] = 0.0 if board.turn == user else 100.0
