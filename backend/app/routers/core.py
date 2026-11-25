@@ -387,7 +387,42 @@ def games_detail(gid: int, db: Session = Depends(get_db)):
                           "best": m.best_san, "best_uci": m.best_uci, "cp_loss": m.cp_loss,
                           "win_pct_loss": m.win_pct_loss, "severity": m.severity, "category": m.category,
                           "phase": m.phase, "clock_s": m.clock_s, "think_s": m.think_s, "evidence": m.detail}
-                         for m in ms]}
+                         for m in ms],
+            "moments": _game_moments(g, ms), "calibration": _calibration(db, g, ms)}
+
+
+def _calibration(db: Session, g: Game, ms) -> dict:
+    from ..services import moments
+
+    return moments.calibration(db, g, list(ms))
+
+
+class CalibrationIn(BaseModel):
+    ply: int | None = Field(None, ge=0, le=2000)
+
+
+@router.post("/games/{gid}/calibration")
+def games_calibration(gid: int, body: CalibrationIn, db: Session = Depends(get_db)):
+    """"Onde você acha que perdeu?": keep the move you picked (None: skipped) and compare it."""
+    from ..models import GameMistake
+    from ..services import moments
+
+    g = db.get(Game, gid)
+    if g is None:
+        raise HTTPException(404)
+    ms = list(db.execute(select(GameMistake).where(GameMistake.game_id == gid, GameMistake.severity != "retired")).scalars())
+    return moments.record_calibration(db, g, ms, body.ply)
+
+
+def _game_moments(g: Game, ms) -> list[dict]:
+    """The plies "Próximo momento" jumps to: your mistakes and blunders (decisive, missed or common)
+    and your !! and ! moves."""
+    from ..services import moments
+
+    wins = (g.metrics or {}).get("wins")
+    out = [{"ply": m.ply, "kind": moments.kind_of(wins, m.ply)} for m in ms if m.severity in moments.SEVERITIES]
+    out += [{"ply": h["ply"], "kind": h["kind"]} for h in (g.metrics or {}).get("highlights") or []]
+    return sorted(out, key=lambda x: x["ply"])
 
 
 # ---------------------------------------------------------------- today's routine

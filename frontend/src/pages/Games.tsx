@@ -6,6 +6,7 @@ import Explain from "../components/Explain";
 import Help from "../components/Help";
 import Icon from "../components/Icon";
 import MoveList from "../components/MoveList";
+import WinGraph from "../components/WinGraph";
 import { Bar, Empty, ErrorNote, Metric, PageHeader, SanText, Spinner } from "../components/ui";
 import { api } from "../lib/api";
 import { ARROW_KINDS, ArrowKind, nullMoveFen, pickArrows } from "../lib/arrows";
@@ -234,6 +235,7 @@ function Review({ id }: { id: number }) {
   const [order, setOrder] = useState<number[]>([]);
   const [good, setGood] = useState<any>(null); // the !! or ! move being looked at
   const [redoing, setRedoing] = useState(false);
+  const [showInacc, setShowInacc] = useState(false);
   const meta = useMeta();
   const { prefs } = usePrefs();
   const nav = useNavigate();
@@ -323,6 +325,25 @@ function Review({ id }: { id: number }) {
     setGood(h);
   };
   const highlights: any[] = g.metrics?.highlights ?? [];
+  // "Onde você acha que perdeu?": a lost game asks once, before the engine's marks are shown
+  const cal = g.calibration;
+  const asking = !!cal?.lost && !cal.asked;
+  const pick = (ply: number | null) => api.post<any>(`/api/games/${id}/calibration`, { ply }).then((r) => {
+    setG((cur: any) => ({ ...cur, calibration: r }));
+    if (r.decisive_ply != null && marks[r.decisive_ply]) openMistake(marks[r.decisive_ply]);
+  }).catch((e) => setErr(e.message));
+  const isGood = (k: string) => k === "great" || k === "brilliant";
+  const nextMoment = (g.moments ?? []).map((m: any) => ({ ...m, at: isGood(m.kind) ? m.ply + 1 : m.ply }))
+    .find((m: any) => m.at > cursor);
+  const goMoment = () => {
+    if (!nextMoment) return;
+    if (isGood(nextMoment.kind) && goods[nextMoment.ply]) openGood(goods[nextMoment.ply]);
+    else if (marks[nextMoment.ply]) openMistake(marks[nextMoment.ply]);
+  };
+  const serious = g.mistakes.filter((m: any) => m.severity !== "inaccuracy");
+  const nInacc = g.mistakes.length - serious.length;
+  const listed = showInacc ? g.mistakes : serious;
+  const fmtPct = (v: number | null | undefined) => (v == null ? "—" : String(v).replace(".", ","));
   const fenAt = (ply: number) => (ply === 0 ? g.start_fen : steps[ply - 1].fen);
   // Arrows at your mistakes: just before you play one, the best move, your move and the opponent's
   // threat; right after it, the opponent's reply that punishes it. Each kind can be switched off.
@@ -360,8 +381,8 @@ function Review({ id }: { id: number }) {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         {/* the board stays in view while the mistakes and the explanation scroll past it */}
         <div className="min-w-0 xl:sticky xl:top-6 xl:self-start">
-          <Board fen={fen} orientation={orientation} interactive={false} lastMove={lastMove} arrows={arrows}
-            badges={justPlayed ? [{ square: justPlayed.move_uci.slice(2, 4), kind: "bad" }]
+          <Board fen={fen} orientation={orientation} interactive={false} lastMove={lastMove} arrows={asking ? [] : arrows}
+            badges={asking ? [] : justPlayed ? [{ square: justPlayed.move_uci.slice(2, 4), kind: "bad" }]
               : !preview && cursor > 0 && goods[cursor - 1] ? [{ square: goods[cursor - 1].uci.slice(2, 4), kind: goods[cursor - 1].kind }] : []}
             reserve={170} id="review" />
           <div className="mt-3 flex items-center gap-1">
@@ -369,11 +390,30 @@ function Review({ id }: { id: number }) {
             <button className="btn-quiet btn-sm" onClick={() => go(cursor - 1)} aria-label="Lance anterior"><Icon name="back" /></button>
             <button className="btn-quiet btn-sm" onClick={() => go(cursor + 1)} aria-label="Próximo lance"><Icon name="forward" /></button>
             <button className="btn-quiet btn-sm" onClick={() => go(steps.length)} aria-label="Fim"><Icon name="last" /></button>
+            <button className="btn btn-sm ml-2" onClick={goMoment} disabled={!nextMoment || asking}>Próximo momento</button>
             {preview && <button className="link ml-3 text-sm" onClick={() => setPreview(null)}>voltar à partida</button>}
           </div>
           <div className="mt-2"><ArrowToggles kinds={["best", "played", "opponent"]} /></div>
         </div>
         <aside className="min-w-0 space-y-6">
+          {asking && (
+            <div className="rounded-lg border border-pen/40 bg-pen/5 p-3 text-sm">
+              <p className="font-bold">Onde você acha que perdeu?</p>
+              <p className="text-muted">Antes de ver o que o motor diz: clique, na lista de lances, no lance em que a partida escapou.</p>
+              <button className="link mt-1" onClick={() => void pick(null)}>pular</button>
+            </div>
+          )}
+          {cal?.asked && cal.picked_ply != null && cal.decisive_ply != null && (
+            <p className={`rounded-lg px-3 py-2 text-sm ${cal.hit ? "bg-good/10" : "bg-sunk"}`}>
+              {cal.hit ? <>Você acertou onde perdeu: o lance {moveNum(cal.decisive_ply)} decidiu a partida.</>
+                : <>Você marcou o lance {moveNum(cal.picked_ply)}; o que decidiu a partida foi o lance {moveNum(cal.decisive_ply)}.</>}
+              {cal.stats.total > 1 && <span className="text-muted"> Você acertou onde perdeu em {cal.stats.hits} de {cal.stats.total} partidas.</span>}
+            </p>
+          )}
+          {(g.metrics?.wins?.length ?? 0) > 1 && (
+            <WinGraph wins={g.metrics.wins} think={g.metrics.think ?? []} cursor={cursor}
+              moments={asking ? [] : g.moments ?? []} onJump={asking ? (c) => void pick(Math.max(0, c - 1)) : go} />
+          )}
           {g.stale && (
             <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warn/40 bg-warn/5 px-3 py-2 text-sm">
               <span>{redoing ? "Reanalisando com os critérios novos…" : "Analisada com os critérios antigos: imprecisões passavam como bons lances e não havia !! nem !."}</span>
@@ -386,6 +426,13 @@ function Review({ id }: { id: number }) {
             <Metric label="ACPL" help="acpl" value={g.metrics?.acpl != null ? String(g.metrics.acpl).replace(".", ",") : "—"} />
             <Metric label="Erros por 100 lances" help="severity" value={g.metrics?.errors_per_100 != null ? String(g.metrics.errors_per_100).replace(".", ",") : "—"} />
           </div>
+          {g.metrics?.phase_accuracy && (
+            <p className="-mt-3 text-sm text-muted">
+              Precisão por fase: abertura <b className="text-ink">{fmtPct(g.metrics.phase_accuracy.opening)}</b>
+              {" · "}meio-jogo <b className="text-ink">{fmtPct(g.metrics.phase_accuracy.middlegame)}</b>
+              {" · "}final <b className="text-ink">{fmtPct(g.metrics.phase_accuracy.endgame)}</b>
+            </p>
+          )}
           {g.metrics?.best_moves != null && (
             <div>
               <div className="mb-2 flex items-center gap-2"><h2>Seus melhores lances</h2><Help id="highlights" /></div>
@@ -417,11 +464,12 @@ function Review({ id }: { id: number }) {
               <Explain key={`good-${good.ply}`} request={{ fen: fenAt(good.ply), move: good.uci }} onPreview={(f, lm) => setPreview({ fen: f, lastMove: lm })} />
             </div>
           )}
-          <div>
+          {!asking && <div>
             <div className="mb-2 flex items-center gap-2"><h2>Seus erros</h2><Help id="severity" /></div>
-            {g.mistakes.length === 0 ? <p className="text-muted">Nenhuma imprecisão, erro ou capivarada nesta partida.</p> : (
+            {g.mistakes.length === 0 ? <p className="text-muted">Nenhuma imprecisão, erro ou capivarada nesta partida.</p>
+              : listed.length === 0 ? <p className="text-muted">Nenhum erro ou capivarada nesta partida.</p> : (
               <ul className="divide-y divide-rule border-y border-rule">
-                {g.mistakes.map((m: any) => (
+                {listed.map((m: any) => (
                   <li key={m.id}>
                     <button className={`flex w-full flex-wrap items-center gap-2 px-1 py-2 text-left text-sm hover:bg-sunk ${focus?.id === m.id ? "bg-pen/5" : ""}`} onClick={() => openMistake(m)}>
                       <span className={`chip ${m.severity === "blunder" ? "border-bad/50 text-bad" : m.severity === "mistake" ? "border-warn/50 text-warn" : ""}`}>{meta.severity(m.severity)}</span>
@@ -433,8 +481,13 @@ function Review({ id }: { id: number }) {
                 ))}
               </ul>
             )}
-          </div>
-          {focus && (
+            {nInacc > 0 && (
+              <button className="link mt-2 text-sm" onClick={() => setShowInacc(!showInacc)}>
+                {showInacc ? "esconder as imprecisões" : `mostrar ${nInacc === 1 ? "1 imprecisão" : `${nInacc} imprecisões`}`}
+              </button>
+            )}
+          </div>}
+          {focus && !asking && (
             <div className="space-y-2">
               <p className="text-sm text-muted">Lance {moveNum(focus.ply)}: você jogou <b className="text-ink"><SanText san={focus.move} /></b>; o Stockfish preferia <b className="text-good"><SanText san={focus.best} /></b>.
                 {focus.think_s != null && ` Você pensou ${String(Math.round(focus.think_s * 10) / 10).replace(".", ",")} s.`}
@@ -458,7 +511,8 @@ function Review({ id }: { id: number }) {
           )}
           <div>
             <h3 className="mb-2 text-sm text-muted">Lances</h3>
-            <MoveList moves={steps.map((s, i) => ({ san: s.san, mark: marks[i]?.severity ?? goods[i]?.kind ?? null }))} cursor={cursor} onJump={go}
+            <MoveList moves={steps.map((s, i) => ({ san: s.san, mark: asking ? null : marks[i]?.severity ?? goods[i]?.kind ?? null }))}
+              cursor={cursor} onJump={asking ? (c) => void pick(Math.max(0, c - 1)) : go}
               startTurn={startTurn} startNumber={startNumber} maxHeight={440} />
           </div>
           {nextId && (

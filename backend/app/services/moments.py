@@ -268,3 +268,50 @@ def second_round(db: Session, day: date | None = None) -> dict:
     s = {**s, "items": s["items"] + more}
     _save(db, s)
     return s
+
+
+# ------------------------------------------------------------------ where you think you lost
+CALIBRATION_KEY = "calibration"
+HIT_PLIES = 2  # your pick counts as right when it is the decisive move or one move either side
+
+
+def decisive_ply(g: Game, ms: list[GameMistake]) -> int | None:
+    """The move that lost the game: the first decisive moment, else your biggest drop."""
+    wins = (g.metrics or {}).get("wins")
+    errs = [m for m in ms if m.severity in SEVERITIES]
+    dec = [m.ply for m in errs if kind_of(wins, m.ply) == "decisive"]
+    if dec:
+        return min(dec)
+    return max(errs, key=lambda m: m.win_pct_loss).ply if errs else None
+
+
+def _calibrations(db: Session) -> dict:
+    kv = db.get(KV, CALIBRATION_KEY)
+    return dict((kv.value or {}).get("games") or {}) if kv else {}
+
+
+def calibration(db: Session, g: Game, ms: list[GameMistake]) -> dict:
+    """For the review screen: whether this lost game still asks "onde você acha que perdeu?", your
+    answer if any, and how often you were right over all games."""
+    allc = _calibrations(db)
+    mine = allc.get(str(g.id))
+    answered = [c for c in allc.values() if c.get("picked_ply") is not None]
+    return {"lost": (g.metrics or {}).get("result_for_user") == 0.0 and decisive_ply(g, ms) is not None,
+            "asked": mine is not None, "picked_ply": (mine or {}).get("picked_ply"),
+            "decisive_ply": (mine or {}).get("decisive_ply"), "hit": (mine or {}).get("hit"),
+            "stats": {"hits": sum(1 for c in answered if c.get("hit")), "total": len(answered)}}
+
+
+def record_calibration(db: Session, g: Game, ms: list[GameMistake], ply: int | None) -> dict:
+    """Keep your pick (None: you skipped) and compare it with the move that lost the game."""
+    dec = decisive_ply(g, ms)
+    hit = None if ply is None or dec is None else abs(ply - dec) <= HIT_PLIES
+    allc = _calibrations(db)
+    allc[str(g.id)] = {"picked_ply": ply, "decisive_ply": dec, "hit": hit, "at": utcnow().isoformat()}
+    kv = db.get(KV, CALIBRATION_KEY)
+    if kv is None:
+        db.add(KV(key=CALIBRATION_KEY, value={"games": allc}))
+    else:
+        kv.value = {"games": allc}
+    db.commit()
+    return calibration(db, g, ms)

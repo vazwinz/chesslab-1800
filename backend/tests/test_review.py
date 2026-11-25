@@ -116,3 +116,46 @@ def test_games_analysed_with_older_criteria_are_flagged_and_queued_again(client,
     assert stale == {ids["old"]: True, ids["new"]: False, ids["never"]: False}
     r = client.post("/api/games/reanalyze-stale").json()
     assert queued == [ids["old"]] and r["count"] == 1
+
+
+def test_game_detail_lists_its_moments(client):
+    from app import db as dbmod
+
+    with dbmod.SessionLocal() as s:
+        g = Game(fingerprint="moments-detail", pgn='[White "TestUser"]\n[Black "Rival"]\n\n1. e4 e5 2. Nf3 Nc6 *',
+                 white="TestUser", black="Rival", result="0-1", user_color="white", analyzed=True,
+                 metrics={"criteria": 2, "wins": [50, 52, 51, 20, 18],
+                          "highlights": [{"ply": 0, "kind": "great", "san": "e4", "uci": "e2e4"}]})
+        s.add(g)
+        s.flush()
+        common = dict(game_id=g.id, fen_before=chess.STARTING_FEN, move_uci="g1f3", move_san="Nf3", best_uci="d2d4",
+                      best_san="d4", eval_before_cp=0, eval_after_cp=-300, cp_loss=300, phase="opening",
+                      category="tactical_blindness")
+        s.add(GameMistake(ply=2, win_pct_loss=31.0, severity="blunder", **common))
+        s.add(GameMistake(ply=0, win_pct_loss=6.0, severity="inaccuracy", **common))  # not a moment
+        s.commit()
+        gid = g.id
+    d = client.get(f"/api/games/{gid}").json()
+    assert d["moments"] == [{"ply": 0, "kind": "great"}, {"ply": 2, "kind": "decisive"}]
+
+
+def test_where_you_think_you_lost_is_kept_and_compared(client):
+    from app import db as dbmod
+
+    with dbmod.SessionLocal() as s:
+        g = Game(fingerprint="calibration", pgn='[White "TestUser"]\n[Black "Rival"]\n\n1. e4 e5 2. Nf3 Nc6 *',
+                 white="TestUser", black="Rival", result="0-1", user_color="white", analyzed=True,
+                 metrics={"criteria": 2, "wins": [50, 52, 51, 20, 18], "result_for_user": 0.0})
+        s.add(g)
+        s.flush()
+        s.add(GameMistake(game_id=g.id, ply=2, fen_before=chess.STARTING_FEN, move_uci="g1f3", move_san="Nf3",
+                          best_uci="d2d4", best_san="d4", eval_before_cp=0, eval_after_cp=-300, cp_loss=300,
+                          win_pct_loss=31.0, severity="blunder", phase="opening", category="tactical_blindness"))
+        s.commit()
+        gid = g.id
+    c = client.get(f"/api/games/{gid}").json()["calibration"]
+    assert c["lost"] is True and c["asked"] is False
+    r = client.post(f"/api/games/{gid}/calibration", json={"ply": 2}).json()
+    assert r["hit"] is True and r["decisive_ply"] == 2 and r["picked_ply"] == 2
+    c = client.get(f"/api/games/{gid}").json()["calibration"]
+    assert c["asked"] is True and c["stats"] == {"hits": 1, "total": 1}
