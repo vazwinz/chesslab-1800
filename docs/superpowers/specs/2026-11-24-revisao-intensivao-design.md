@@ -20,7 +20,7 @@ Contexto que pesa:
 ## Metas
 
 1. O modo **"Seus erros de partida"** (o nome fica, decisão do dono) passa a começar pela **sessão do dia**: os 5 momentos mais valiosos das partidas do dia, de partidas diferentes e misturados, em ~10 min.
-2. Cada momento começa com **você tentando** achar o lance. Depois vem um toque de **"certeza ou chute?"** e a **resposta logo em seguida**, com a ideia encenada no tabuleiro.
+2. Cada momento começa com **você tentando** achar o lance, e a **resposta vem logo em seguida**, com a ideia encenada no tabuleiro.
 3. O momento **volta em 1, 3, 7 e 21 dias**, até ficar firme.
 4. O dia termina com **1 regra "se… então"** tirada do seu padrão de erro, mostrada de novo no dia seguinte.
 5. Mostrar **onde você gastou pouco tempo num lance que decidiu a partida**.
@@ -45,7 +45,6 @@ Contexto que pesa:
 |---|---|---|
 | Tentar antes de ver | Efeito do pré-teste: a tentativa, mesmo errada, melhora o que se guarda da resposta (Richland, Kornell & Kao 2009; Kornell, Hays & Bjork 2009). A resposta tem que vir **logo depois**: com atraso o ganho some (Grimaldi & Karpicke 2012) | forte |
 | Voltar em 1, 3, 7 e 21 dias | Testar e espaçar são as duas técnicas mais bem avaliadas (Dunlosky et al. 2013) | forte |
-| "Certeza ou chute?" | Hipercorreção: erro cometido com certeza é corrigido com mais força (Butterfield & Metcalfe 2001) | forte |
 | Encenar a ideia depois da tentativa | Exemplo resolvido depois de tentar (falha produtiva, Kapur); um motivo por vez pela carga de memória de trabalho (Sweller) | média a forte |
 | Misturar momentos de partidas diferentes | Misturar tipos de problema treina escolher qual ideia serve (Rohrer & Taylor 2007) | média |
 | Tempo × peso do lance | Pensar mais melhora o lance em todos os níveis (Moxley et al. 2012; alcance limitado segundo o estudo de 2023) | média |
@@ -128,8 +127,7 @@ Detalhes:
 
 1. **Posição** (`fen_before`, orientada para o seu lado). Junto vem uma linha com a partida, o número do lance e o seu relógio, sem dizer o tipo do momento: dizer seria dica. Pedido: "Ache o melhor lance."
 2. **Você joga** no tabuleiro. Não tem voltar nem dica.
-3. **Certeza ou chute?** Dois botões grandes, um toque, antes de qualquer resposta. Teclas 1 e 2.
-4. **Resposta na hora**, sem tela intermediária:
+3. **Resposta na hora**, sem tela intermediária:
    - **Acertou:** "Isso!" e o melhor lance com a ideia em 2 a 3 meios-lances (a `pv`).
    - **Errou:**
      - primeiro a **encenação** do problema do seu lance: o tabuleiro joga o seu lance e a resposta que pune (a linha guardada em `detail`), com seta, e uma frase curta do motivo. As fontes:
@@ -138,11 +136,12 @@ Detalhes:
        - ameaça ignorada e os outros: categoria do Error DNA;
        - garfo e cravada: detectores **novos e pequenos**, com python-chess (uma peça atacando 2 alvos valiosos depois da resposta; `board.is_pinned`). Na fase 1, sem detector, a frase fica genérica ("depois de X, ele ganha material").
      - depois o melhor lance com a ideia dele;
-     - errou **com certeza**: a resposta ganha destaque ("Você tinha certeza: olhe de novo") e o momento volta amanhã de qualquer jeito.
    - **Tempo × peso:** se o momento era decisivo ou chance perdida e você pensou menos de 5 s (ou menos de metade da sua mediana), aparece a linha "Você pensou 3 s no lance que decidiu a partida."
-5. **Próximo** (tecla Enter). O tipo do momento ("chance perdida", "erro decisivo") só aparece aqui, depois da resposta.
+4. **Próximo** (tecla Enter). O tipo do momento ("chance perdida", "erro decisivo") só aparece aqui, depois da resposta.
 
-Registro: um `Attempt` de `exercise_kind="game_position"` com `mode="daily_review"`. O "certeza ou chute" vai num campo JSON que já existe (`hesitation["confidence"]`), sem migração.
+Registro: um `Attempt` de `exercise_kind="game_position"` com `mode="daily_review"`, sem migração.
+
+O toque de "certeza ou chute?" (hipercorreção) foi considerado e **cortado pelo dono**: um passo a mais em cada momento.
 
 ### 5. Retorno espaçado por posição, sem tabela nova
 
@@ -152,7 +151,7 @@ O próximo vencimento de cada `GameMistake` sai do histórico de `Attempt` dele,
 - errou → volta amanhã e cai um degrau;
 - 3 acertos seguidos no degrau de 21 dias → **dominado**, sai da fila.
 
-O cálculo é uma função pura sobre os `Attempt` (`game_mistake_id`, `correct`, `finished_at`, confiança), fácil de testar. Se ficar lento com muitas tentativas, um índice ou cache é decisão de quem constrói.
+O cálculo é uma função pura sobre os `Attempt` (`game_mistake_id`, `correct`, `finished_at`), fácil de testar. Se ficar lento com muitas tentativas, um índice ou cache é decisão de quem constrói.
 
 ### 6. Regra do dia ("se… então")
 
@@ -196,7 +195,7 @@ A regra aceita aparece no Início no dia seguinte e na tela de começar partida 
    - import diário do chess.com;
    - `wins` e `think` nas métricas;
    - seleção dos momentos;
-   - fluxo de um momento (tentar, certeza, resposta na hora com o melhor lance);
+   - fluxo de um momento (tentar, resposta na hora com o melhor lance);
    - retorno espaçado;
    - troca do passo da rotina e do modo do Treinar.
 2. **Ensino:** encenação do motivo, tempo × peso, regra do dia e a contagem da categoria nas partidas seguintes.
