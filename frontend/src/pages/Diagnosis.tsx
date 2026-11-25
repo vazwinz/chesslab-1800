@@ -302,6 +302,24 @@ function DnaTab() {
 }
 
 // ------------------------------------------------------------------ retention
+/** "Seus erros de partida": whether the positions that come back are solved, and the habit. */
+function ReviewStats() {
+  const [s, setS] = useState<any>(null);
+  useEffect(() => { api.get<any>("/api/review/today").then((r) => setS(r.stats)).catch(() => {}); }, []);
+  if (!s) return null;
+  const v = (x: number | null, unit = "%") => (x == null ? "—" : `${String(x).replace(".", ",")}${unit}`);
+  return (
+    <Section title="Seus erros de partida" hint="As posições das suas partidas voltam em 1, 3, 7 e 21 dias. Acertar quando elas voltam é o sinal de que a ideia ficou.">
+      <dl className="grid max-w-xl grid-cols-2 gap-4 sm:grid-cols-4">
+        <div><dt className="text-sm text-muted">Acerto ao voltar depois de 3 dias</dt><dd className="stat">{v(s.returns_ok_3d)}</dd></div>
+        <div><dt className="text-sm text-muted">Depois de 7 dias</dt><dd className="stat">{v(s.returns_ok_7d)}</dd></div>
+        <div><dt className="text-sm text-muted">Dias com sessão nesta semana</dt><dd className="stat">{s.session_days_week}</dd></div>
+        <div><dt className="text-sm text-muted">Tempo de uma sessão (mediana)</dt><dd className="stat">{v(s.median_session_min, " min")}</dd></div>
+      </dl>
+    </Section>
+  );
+}
+
 function RetentionTab() {
   const { d, e } = useApi("/api/cognitive/retention");
   const meta = useMeta();
@@ -310,6 +328,7 @@ function RetentionTab() {
       const maxN = Math.max(1, ...d.curve.map((b: any) => b.new_positions_n));
       return (
         <>
+          <ReviewStats />
           <Intro help="retention">Mostra se você continua acertando um tema depois de um tempo sem vê-lo. Acertar puzzles novos dias depois é o melhor sinal de que você aprendeu a ideia, e não só decorou uma posição.</Intro>
           <Section title="Acerto em puzzles novos, por tempo sem ver o tema"
             hint="Cada linha junta os puzzles resolvidos depois de um intervalo sem o tema. Puzzles repetidos ficam de fora.">

@@ -434,7 +434,7 @@ def review_today(db: Session = Depends(get_db)):
     game_jobs.maybe_auto_import(db)
     s = moments.today_session(db)
     return {"session": s, "done": len(moments.answered(db, s)), "total": len(s.get("items", [])),
-            "new_games": moments.new_games_since(db, s)}
+            "new_games": moments.new_games_since(db, s), "stats": moments.stats(db)}
 
 
 @router.post("/review/today/more")

@@ -16,6 +16,7 @@ Everyday settings (theme, board, notation, sounds, goal rating, the coach AI, up
 | `COACH_DEPTH` | `18` | Depth of the Stockfish facts behind "Explicar" (rules and AI both start from them). |
 | `CHESSLAB_PLAYER_NAMES` | empty | Your usernames (comma separated) to detect your colour in PGNs. Normally set in the app. |
 | `AURA_UPDATE_REPO` | `vazwinz/chesslab-1800` | Public GitHub repository whose latest Release announces new versions. Empty = never check. "Atualizar agora" only downloads files of that repository's releases. |
+| `AURA_BACKGROUND_JOBS` | `1` | `0` stops what the app starts by itself: resuming an interrupted game analysis at start and the automatic Chess.com import. The tests set it to `0`. |
 | `AURA_UPDATE_API` | `https://api.github.com` | For testing the update notice and "Atualizar agora" against a local stand-in of GitHub's Releases API. When it is set, files are downloaded only from under that address. |
 | `ALLOWED_HOSTS` | `127.0.0.1,localhost,::1,testserver` | Host headers the server answers to. Anything else gets 400 (protection against DNS rebinding). |
 | `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Allowed origins for the Vite dev server. Writes from any other origin are refused. |

@@ -185,3 +185,19 @@ def test_retired_mistakes_never_come_back(db):
     m = _mistake(db, old, severity="retired")
     _attempt(db, m, False, datetime(2026, 10, 1, 20, 0))
     assert moments.due_returns(db, TODAY, 5) == []
+
+
+def test_review_stats_counts_returns_and_sessions(db):
+    old = _game(db, played=date(2026, 9, 1))
+    a = _mistake(db, old)
+    for when, ok in ((datetime(2026, 10, 1, 20), True), (datetime(2026, 10, 2, 20), True),
+                     (datetime(2026, 10, 5, 20), True), (datetime(2026, 10, 12, 20), False)):
+        _attempt(db, a, ok, when)  # steps before each answer: 0, 1, 2, 3
+    b = _mistake(db, old, ply=20)
+    for day, minutes in ((23, 8), (24, 12)):  # Monday and Tuesday of the week of Wed 2026-11-25
+        db.add(Attempt(exercise_kind="game_position", game_mistake_id=b.id, mode="daily_review", correct=False,
+                       served_at=datetime(2026, 11, day, 23, 0), finished_at=datetime(2026, 11, day, 23, minutes)))
+    db.commit()
+    s = moments.stats(db, date(2026, 11, 25))
+    assert s["returns_ok_3d"] == 50 and s["returns_ok_7d"] == 0
+    assert s["session_days_week"] == 2 and s["median_session_min"] == 10

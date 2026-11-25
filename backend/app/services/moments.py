@@ -315,3 +315,45 @@ def record_calibration(db: Session, g: Game, ms: list[GameMistake], ply: int | N
         kv.value = {"games": allc}
     db.commit()
     return calibration(db, g, ms)
+
+
+# ------------------------------------------------------------------ whether it works
+def _steps_before(history: list[tuple[bool, datetime]]) -> list[int]:
+    """The ladder step each answer was given at (the same moves as `ladder`)."""
+    step, out = 0, []
+    for correct, _ in history:
+        out.append(step)
+        step = min(step + 1, len(INTERVALS)) if correct else max(step - 1, 0)
+    return out
+
+
+def _local_day(t: datetime) -> date:
+    from datetime import timezone
+
+    return t.replace(tzinfo=timezone.utc).astimezone().date()
+
+
+def stats(db: Session, day: date | None = None) -> dict:
+    """Numbers for Diagnóstico: how often positions coming back after 3 and after 7 days are solved,
+    on how many days of this week you did the session, and how long a session takes (median)."""
+    import statistics
+
+    day = day or date.today()
+    b3, b7 = [], []
+    for h in _histories(db).values():
+        for (ok, _), step in zip(h, _steps_before(h)):
+            if step >= 2:
+                b3.append(ok)
+            if step >= 3:
+                b7.append(ok)
+    pct = lambda xs: round(100 * sum(xs) / len(xs)) if xs else None  # noqa: E731
+    rows = db.execute(select(Attempt.served_at, Attempt.finished_at).where(
+        Attempt.mode == "daily_review", Attempt.finished_at.is_not(None))).all()
+    per_day: dict[date, list[tuple[datetime, datetime]]] = defaultdict(list)
+    for served, finished in rows:
+        per_day[_local_day(finished)].append((served or finished, finished))
+    monday = day - timedelta(days=day.weekday())
+    minutes = [(max(f for _, f in xs) - min(s for s, _ in xs)).total_seconds() / 60 for xs in per_day.values()]
+    return {"returns_ok_3d": pct(b3), "returns_ok_7d": pct(b7),
+            "session_days_week": sum(1 for d in per_day if monday <= d <= day),
+            "median_session_min": round(statistics.median(minutes), 1) if minutes else None}
