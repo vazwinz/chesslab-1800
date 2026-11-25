@@ -31,7 +31,7 @@ On the developer's PC (Windows 11 Pro 26200, Python 3.14.5, Node 26, NSIS 3, Edg
 
 Fixed during this check: the launcher ignored `CHESSLAB_DATA_DIR` for `aura.log` and the window profile; Ctrl + / Ctrl - did nothing (pywebview switches WebView2's browser accelerator keys off); Ctrl+F flipped the analysis board and Ctrl+A opened the analysis after a puzzle; the corrupted-database dialog showed SQLAlchemy's English text; the real Lichess dump (it starts with a pzstd skippable frame) was read as plain CSV and could not be imported.
 
-## Verified since 0.6.0 (next version)
+## Verified for 0.6.1
 
 - **The warning of the day** (Windows 11, the built frontend on a temporary data folder): after a session with three wrong answers the end card said "Seus lances estão impulsivos." and "Os 3 erros de hoje foram assim."; with those answers moved to the day before, Início showed the warning with its trend line and Jogar showed it before a game; the old rule endpoint answers 404. Backend tests pass (see the count in the README).
 

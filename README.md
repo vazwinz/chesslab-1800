@@ -14,7 +14,7 @@ The whole interface is in Brazilian Portuguese. These developer docs stay in Eng
 | Engine | Stockfish (native binary, UCI), bundled in the desktop app |
 | Puzzles | Lichess puzzle database (CC0), downloaded and imported from inside the app |
 
-## Since 0.6.0 (next version)
+## What's new in 0.6.1
 
 - **A warning instead of the rule of the day.** At the end of the session, the kind of mistake you missed most is said in one line, with the count behind it ("Seus lances estão impulsivos. 3 dos 4 erros de hoje foram assim."), with nothing to accept or edit. The next day the same warning shows on Início and before every game in Jogar, with how often that kind of mistake came up in your games up to it and since. The if-then rule is gone.
 
