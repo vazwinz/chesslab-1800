@@ -445,33 +445,12 @@ def review_today_more(db: Session = Depends(get_db)):
     return {"session": s, "done": len(moments.answered(db, s)), "total": len(s.get("items", [])), "new_games": 0}
 
 
-class RuleIn(BaseModel):
-    text: str = Field(..., min_length=1, max_length=300)
-    category: str = Field(..., min_length=1, max_length=40)
+@router.get("/alert")
+def alert_state(db: Session = Depends(get_db)):
+    """The warning of the day: today's (after the session) and the last earlier one, with its trend."""
+    from ..services import alerts
 
-
-@router.get("/rule")
-def rule_state(db: Session = Depends(get_db)):
-    """The rule of the day: today's suggestion, the rule accepted today, the one in force today."""
-    from ..services import rules
-
-    return rules.state(db)
-
-
-@router.put("/rule")
-def rule_accept(body: RuleIn, db: Session = Depends(get_db)):
-    from ..services import rules
-
-    rules.accept(db, body.text, body.category)
-    return rules.state(db)
-
-
-@router.delete("/rule")
-def rule_remove(db: Session = Depends(get_db)):
-    from ..services import rules
-
-    rules.remove(db)
-    return rules.state(db)
+    return alerts.state(db)
 
 
 @router.get("/routine/today")

@@ -201,3 +201,12 @@ def test_review_stats_counts_returns_and_sessions(db):
     s = moments.stats(db, date(2026, 11, 25))
     assert s["returns_ok_3d"] == 50 and s["returns_ok_7d"] == 0
     assert s["session_days_week"] == 2 and s["median_session_min"] == 10
+
+
+def test_time_note_only_for_fast_decisive_moves():
+    assert moments.time_note("decisive", 3.0, 20.0) == "Você pensou 3 s no lance que decidiu a partida."
+    assert moments.time_note("missed", 8.0, 20.0) == "Você pensou 8 s na chance que ele te deu."
+    assert moments.time_note("common", 1.0, 20.0) is None
+    assert moments.time_note("decisive", 30.0, 20.0) is None
+    assert moments.time_note("decisive", None, 20.0) is None
+    assert moments.time_note("decisive", 1.4, None) == "Você pensou 1,4 s no lance que decidiu a partida."

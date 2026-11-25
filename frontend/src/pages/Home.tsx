@@ -4,7 +4,7 @@ import { Bar as RBar, BarChart, CartesianGrid, Line, LineChart, ReferenceLine, R
 import { ChartTip, NumbersTable } from "../components/charts";
 import Help from "../components/Help";
 import RoutinePanel from "../components/RoutinePanel";
-import RuleCard from "../components/RuleCard";
+import AlertCard from "../components/AlertCard";
 import { Bar, Empty, ErrorNote, Metric, PageHeader, Spinner } from "../components/ui";
 import { api } from "../lib/api";
 import { dateTime, dayShort, num, pct, secs } from "../lib/format";
@@ -57,7 +57,7 @@ export default function Home() {
         </section>
       )}
 
-      <div className="mb-4"><RuleCard /></div>
+      <div className="mb-4"><AlertCard /></div>
       {routine && <div className="mb-10"><RoutinePanel r={routine} onChange={setRoutine} /></div>}
 
       <section className="mb-10">

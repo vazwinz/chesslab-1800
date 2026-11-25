@@ -5,7 +5,7 @@ import BlunderAlarm from "../components/BlunderAlarm";
 import Board, { Badge } from "../components/Board";
 import EvalBar from "../components/EvalBar";
 import Icon from "../components/Icon";
-import RuleCard from "../components/RuleCard";
+import AlertCard from "../components/AlertCard";
 import MoveList, { ListMove } from "../components/MoveList";
 import { ErrorNote, PageHeader, SanText, Spinner } from "../components/ui";
 import { api } from "../lib/api";
@@ -262,7 +262,7 @@ function Setup({ st, starts, levels, onStart, initial, routine }: { st: any; sta
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
       <section className="panel space-y-6 p-5 sm:p-6">
         <h2 className="text-xl">Nova partida</h2>
-        <RuleCard compact />
+        <AlertCard compact />
         {gamesStep && (
           <p className="rounded-lg bg-sunk px-3 py-2 text-sm">
             {gamesStep.completed ? "As partidas da rotina de hoje estão feitas. Jogar mais continua valendo para o seu nível."
