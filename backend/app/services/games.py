@@ -17,7 +17,7 @@ from ..cognitive.error_dna import classify, engine_features, phase_of
 from ..config import settings
 from ..models import Attempt, Game, GameMistake
 from .engine import StockfishService, win_pct
-from .judgement import CRITERIA, game_accuracy, score_move
+from .judgement import CRITERIA, game_accuracy, move_accuracy, score_move
 
 
 def _fingerprint(game: chess.pgn.Game) -> str:
@@ -166,6 +166,8 @@ def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int |
     phase_moves = {"opening": [0, 0.0], "middlegame": [0, 0.0], "endgame": [0, 0.0]}
     low_clock_moves = low_clock_errors = 0
     think_times: list[float] = []
+    think_by_ply: list[float | None] = [None] * len(plies)  # your seconds on each of your moves
+    phase_acc: dict[str, list[float]] = {"opening": [], "middlegame": [], "endgame": []}
     for ply, child in enumerate(plies):
         move = child.move
         mover = board.turn
@@ -187,8 +189,10 @@ def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int |
             ph = phase_of(board)
             phase_moves[ph][0] += 1
             phase_moves[ph][1] += cl
+            phase_acc[ph].append(move_accuracy(wins[ply], wins[ply + 1]))
             if think is not None:
                 think_times.append(think)
+                think_by_ply[ply] = round(think, 1)
             low_thr = max(10.0, 0.05 * base) if base else None
             if clock is not None and low_thr is not None and clock <= low_thr:
                 low_clock_moves += 1
@@ -215,7 +219,7 @@ def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int |
                     best_uci=s.best.move, best_san=s.best.san,
                     eval_before_cp=s.best.cp, eval_after_cp=s.user.cp,
                     cp_loss=s.cp_loss, win_pct_loss=s.win_pct_loss, severity=sev, clock_s=clock, think_s=think,
-                    phase=ph, category=cat, detail=f.as_dict(), pv=s.best.pv[:8]))
+                    phase=ph, category=cat, detail={**f.as_dict(), "refutation": s.user.pv[:8]}, pv=s.best.pv[:8]))
         board.push(move)
     if board.is_checkmate():
         wins[-1] = 0.0 if board.turn == user else 100.0
@@ -239,6 +243,12 @@ def analyze_game(db: Session, game: Game, engine: StockfishService, depth: int |
         "result_for_user": _result_for(game.result, game.user_color),
         "depth": depth,
         "criteria": CRITERIA,
+        # for the daily session and the review screen: the win-% curve (your side, every position),
+        # your seconds per move, accuracy by phase, and whether the deep pass is still to come
+        "wins": [round(w, 1) for w in _filled(wins)],
+        "think": think_by_ply,
+        "phase_accuracy": {k: (round(sum(v) / len(v), 1) if v else None) for k, v in phase_acc.items()},
+        "deep": "pending" if depth < settings.game_analysis_depth else "done",
     }
     _store_mistakes(db, game, found)
     game.metrics = metrics

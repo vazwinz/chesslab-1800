@@ -2,7 +2,10 @@
 be analysed again after its mistakes became training exercises."""
 from __future__ import annotations
 
+import io
+
 import chess
+import chess.pgn
 import pytest
 
 from app.models import Attempt, Game, GameMistake
@@ -42,6 +45,21 @@ def test_the_smothered_mate_sacrifice_is_stored_as_brilliant(db, eng):
     assert m["criteria"] == judgement.CRITERIA
     assert [(h["ply"], h["kind"], h["san"]) for h in m["highlights"]] == [(0, "brilliant", "Qg8+")]
     assert m["brilliant"] == 1 and m["accuracy"] == 100.0
+
+
+@needs_engine
+def test_analysis_keeps_the_curve_think_times_and_refutation(db, eng):
+    g = _first_game(db)  # TestUser has White; the fixture has clock comments on every move
+    plies = len(list(chess.pgn.read_game(io.StringIO(g.pgn)).mainline()))
+    m = analyze_game(db, g, eng, depth=8)
+    assert len(m["wins"]) == plies + 1
+    assert all(w is not None and 0 <= w <= 100 for w in m["wins"])
+    assert isinstance(m["think"][2], float)  # White's second move, with a clock
+    assert m["think"][1] is None  # Black's move: not yours
+    assert set(m["phase_accuracy"]) == {"opening", "middlegame", "endgame"}
+    assert m["deep"] == "pending"  # depth 8 is below the review depth
+    ms = db.query(GameMistake).filter(GameMistake.game_id == g.id).all()
+    assert ms and all(x.detail["refutation"][0] == x.move_uci for x in ms)
 
 
 @needs_engine
