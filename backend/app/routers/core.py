@@ -391,6 +391,25 @@ def games_detail(gid: int, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------- today's routine
+@router.get("/review/today")
+def review_today(db: Session = Depends(get_db)):
+    """Today's session of "Seus erros de partida": how far you are, and games that arrived since."""
+    from ..services import game_jobs, moments
+
+    game_jobs.maybe_auto_import(db)
+    s = moments.today_session(db)
+    return {"session": s, "done": len(moments.answered(db, s)), "total": len(s.get("items", [])),
+            "new_games": moments.new_games_since(db, s)}
+
+
+@router.post("/review/today/more")
+def review_today_more(db: Session = Depends(get_db)):
+    from ..services import moments
+
+    s = moments.second_round(db)
+    return {"session": s, "done": len(moments.answered(db, s)), "total": len(s.get("items", [])), "new_games": 0}
+
+
 @router.get("/routine/today")
 def routine_today(db: Session = Depends(get_db)):
     return routine.today(db)

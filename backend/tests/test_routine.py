@@ -130,3 +130,22 @@ def test_the_mistakes_of_the_last_games_come_first(db):
     assert db.get(Attempt, ex["attempt_id"]).game_mistake_id == new.id
     db.commit()
     assert [m.id for m in trainer.own_mistake_pool(db)] == [old.id], "a position just shown waits three days"
+
+
+def test_own_mistakes_target_is_the_session_size(db):
+    from datetime import date
+
+    for i in range(2):
+        g = Game(fingerprint=f"size{i}", pgn="", white="TestUser", black="Rival", result="0-1", user_color="white",
+                 source="chess.com", played_on=date.today(), analyzed=True, metrics={"criteria": 2})
+        db.add(g)
+        db.flush()
+        db.add(GameMistake(game_id=g.id, ply=10, fen_before=chess.STARTING_FEN, move_uci="f2f3", move_san="f3",
+                           best_uci="e2e4", best_san="e4", eval_before_cp=30, eval_after_cp=-160, cp_loss=190,
+                           win_pct_loss=20.0, severity="mistake", phase="opening", category="tactical_blindness"))
+    db.commit()
+    from app.services import routine
+
+    steps = {s["key"]: s for s in routine.today(db)["steps"]}
+    assert steps["own_mistakes"]["target"] == 2 and steps["own_mistakes"]["unit"] == "momentos"
+    assert steps["own_mistakes"]["title"] == "Seus erros de partida"

@@ -16,14 +16,15 @@ from ..cognitive.attention import should_offer_light_day
 from ..cognitive.retention import due_concepts
 from ..models import KV, Attempt, OpeningDrill, PlanBlock, RepertoireLine, TrainingSession, utcnow
 from . import play, puzzles
+from .moments import answered, today_session
 from .trainer import own_mistake_pool
 
 KEY = "routine"
 # in order; "light" is the target on a light day (0: the step is left out)
 STEPS: dict[str, dict] = {
-    "own_mistakes": {"title": "Seus erros de partida", "unit": ("posição", "posições"), "target": 5, "light": 3,
-                     "minutes": 8, "to": "/treinar?modo=own_mistakes",
-                     "why": "Posições em que você errou nas suas partidas, as mais recentes primeiro. Ache o lance que faltou."},
+    "own_mistakes": {"title": "Seus erros de partida", "unit": ("momento", "momentos"), "target": 10, "light": 6,
+                     "minutes": 10, "to": "/treinar?modo=own_mistakes",
+                     "why": "Os momentos que mais valem das suas partidas de hoje, e os que voltam para revisão. Ache o lance que faltou."},
     "loop": {"title": "Treino em ciclo", "unit": ("puzzle", "puzzles"), "target": 15, "light": 8, "minutes": 20,
              "to": "/treinar?modo=loop", "why": "Mede você, acha o erro que mais se repete e treina exatamente ele."},
     "retention": {"title": "Revisão espaçada", "unit": ("puzzle", "puzzles"), "target": 5, "light": 5, "minutes": 6,
@@ -61,9 +62,9 @@ def _plan(db: Session, day: date, light: bool) -> list[tuple[str, int]]:
         if target > 0:
             out.append((key, target))
 
-    pool = len(own_mistake_pool(db))
-    if pool:
-        add("own_mistakes", pool)
+    session = len(today_session(db, day, light)["items"])  # the day's session: its size is the target
+    if session:
+        add("own_mistakes", session)
     has_puzzles = puzzles.puzzle_count(db) > 0
     if has_puzzles:
         add("loop")
@@ -78,6 +79,16 @@ def _plan(db: Session, day: date, light: bool) -> list[tuple[str, int]]:
         add(side)
     add("games")
     return out
+
+
+def _session_left(db: Session, day: date) -> int:
+    s = today_session(db, day)
+    return len([i for i in s.get("items", []) if i["mistake_id"] not in answered(db, s)])
+
+
+def light_today(db: Session, day: date | None = None) -> bool:
+    """Whether today's routine is the light one (its steps say so)."""
+    return any(r.light_day for r in _steps(db, day or date.today()))
 
 
 def _minutes(key: str, target: int) -> int:
@@ -166,7 +177,7 @@ def today(db: Session, day: date | None = None) -> dict:
         target = targets.get(r.key) or s["light" if r.light_day else "target"] or s["target"]
         done = _done(db, r.key, day)
         # nothing left to do in that mode counts as done (every mistake already seen, nothing due)
-        exhausted = (r.key == "own_mistakes" and not own_mistake_pool(db)) or \
+        exhausted = (r.key == "own_mistakes" and _session_left(db, day) == 0 and not own_mistake_pool(db)) or \
                     (r.key == "retention" and not due_concepts(db, limit=1))
         if not r.completed and (done >= target or exhausted):
             r.completed, r.completed_at, changed = True, utcnow(), True

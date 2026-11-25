@@ -178,7 +178,8 @@ def _save(db: Session, session: dict) -> None:
     db.commit()
 
 
-def _answered(db: Session, session: dict) -> set[int]:
+def answered(db: Session, session: dict) -> set[int]:
+    """Mistakes of the session already answered in it (since it was built)."""
     since = datetime.fromisoformat(session["built_at"])
     ids = [i["mistake_id"] for i in session.get("items", [])]
     if not ids:
@@ -194,7 +195,7 @@ def build_session(db: Session, day: date, light: bool) -> dict:
     prev = _stored(db)
     carry: list[int] = []
     if prev and prev.get("day") and prev["day"] < day.isoformat():
-        done = _answered(db, prev)
+        done = answered(db, prev)
         carry = [i["mistake_id"] for i in prev.get("items", []) if i["mistake_id"] not in done]
     games = _window_games(db, day, 1) or _window_games(db, day, 3)
     new = _order(_pick(_candidates(db, games), NEW[light], set(carry)))

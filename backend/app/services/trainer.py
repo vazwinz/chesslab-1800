@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 
 from ..cognitive import attention, interventions, loop, pressure, retention
 from ..cognitive.error_dna import CATEGORIES, DecisionFeatures, classify, engine_features, phase_of
-from ..models import Attempt, GameMistake, InterventionAssignment, Puzzle, RatingPoint, TrainingSession, utcnow
-from . import adaptive, puzzles
+from ..models import Attempt, Game, GameMistake, InterventionAssignment, Puzzle, RatingPoint, TrainingSession, utcnow
+from . import adaptive, moments, puzzles
 from .engine import EngineUnavailable, get_engine
 from .explain import explain
 from .rating import current_rating, expected_score, glicko_update
@@ -129,6 +129,53 @@ def _own_mistake(db: Session, sess: TrainingSession, mode: str, **kw) -> dict | 
     return _payload(a, gm=gm)
 
 
+def _light_today(db: Session) -> bool:
+    from .routine import light_today
+
+    try:
+        return light_today(db)
+    except Exception:  # the routine is never a reason not to train
+        return False
+
+
+def _session_exercise(db: Session, sess: TrainingSession) -> dict | None:
+    """The next moment of today's session of "Seus erros de partida", or None when it is done.
+    The kind of the moment is not sent: saying "chance perdida" before you move would be a hint."""
+    s = moments.today_session(db, light=_light_today(db))
+    done = moments.answered(db, s)
+    items = s.get("items", [])
+    for i, item in enumerate(items):
+        if item["mistake_id"] in done:
+            continue
+        gm = db.get(GameMistake, item["mistake_id"])
+        if gm is None or gm.severity == "retired":  # re-judged by the deep pass in the meantime
+            continue
+        g = db.get(Game, gm.game_id)
+        user_white = (g.user_color if g else "white") == "white"
+        a = _new_attempt(db, sess, "daily_review", gm=gm)
+        return _payload(a, gm=gm, extra={
+            "prompt": "Ache o melhor lance.",
+            "moment": {"index": i + 1, "total": len(items), "source": item["source"]},
+            "context": {"opponent": (g.black if user_white else g.white) if g else None,
+                        "move_number": chess.Board(gm.fen_before).fullmove_number, "clock_s": gm.clock_s}})
+    return None
+
+
+def _sans(fen: str, ucis: list[str]) -> list[str]:
+    """SAN of a line from a position, up to its first illegal move."""
+    board, out = chess.Board(fen), []
+    for u in ucis:
+        try:
+            mv = chess.Move.from_uci(u)
+        except ValueError:
+            break
+        if mv not in board.legal_moves:
+            break
+        out.append(board.san(mv))
+        board.push(mv)
+    return out
+
+
 def _intervention_exercise(db: Session, sess: TrainingSession, asg: InterventionAssignment) -> dict:
     spec = interventions.exercise_spec(db, asg)
     if spec.get("interleave_with_due_review"):
@@ -179,7 +226,11 @@ def next_exercise(db: Session, sess: TrainingSession) -> dict:
         db.commit()
         return ex
     if kind == "own_mistakes":
-        ex = _own_mistake(db, sess, "standard")
+        ex = _session_exercise(db, sess)
+        if ex is None:
+            ex = _own_mistake(db, sess, "standard")
+            if ex is not None:
+                ex["moment"] = None
         if ex is None:
             raise NoExercise("Ainda não há erros de partidas analisadas. Importe suas partidas em Partidas e espere a análise.")
         db.commit()
@@ -497,8 +548,16 @@ def finish(db: Session, a: Attempt, correct: bool, total_ms: int, hesitation: di
                     "game_url": p.game_url, "start_fen": puzzles.puzzle_start(p)["fen"]})
     else:
         gm = db.get(GameMistake, a.game_mistake_id)
+        g = db.get(Game, gm.game_id)
+        kind = moments.kind_of((g.metrics or {}).get("wins") if g else None, gm.ply)
+        refutation = list((gm.detail or {}).get("refutation") or [])
+        best_line = list(gm.pv or [])[:6]
         out.update({"best_san": gm.best_san, "your_game_move": gm.move_san, "comparison": comparison,
-                    "category": gm.category})
+                    "category": gm.category, "fen_before": gm.fen_before,
+                    "refutation_uci": refutation, "refutation_san": _sans(gm.fen_before, refutation),
+                    "best_line_uci": best_line, "best_line_san": _sans(gm.fen_before, best_line),
+                    "moment_kind": kind, "moment_label": moments.KIND_LABEL[kind],
+                    "next_in_days": moments.next_return_in(db, gm.id)})
     if a.candidates:
         out["candidates"] = _score_candidates(db, a)
     db.commit()
