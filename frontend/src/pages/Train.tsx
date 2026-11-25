@@ -133,6 +133,11 @@ function Session() {
   const [step, setStep] = useState<number | null>(null); // solution viewer
   const [explain, setExplain] = useState(false);
   const [preview, setPreview] = useState<{ fen: string; lastMove: [string, string] | null } | null>(null);
+  // game positions: which line the viewer shows (why your move fails / the best one)
+  const [lineKind, setLineKind] = useState<"refutation" | "best">("best");
+  // "Seus erros de partida": the day's session is over and the old pool comes next
+  const [dayDone, setDayDone] = useState<{ newGames: number; ok: number; total: number; noMore?: boolean } | null>(null);
+  const hadMoments = useRef(false);
   const hes = useRef<Hesitation>({ selection_changes: 0, cancelled_drags: 0, piece_selections: 0 });
   const seq = useRef(0);
   const set = st.set;
@@ -155,9 +160,20 @@ function Session() {
     setExplain(false);
     setPreview(null);
     setView("play");
+    setLineKind("best");
     try {
       const e: Exercise = await api.post(`/api/sessions/${session.id}/next`);
       if (my !== seq.current) return;
+      if (session.kind === "own_mistakes") {
+        if (e.moment) hadMoments.current = true;
+        else if (hadMoments.current) {
+          hadMoments.current = false;
+          const r = await api.get<any>("/api/review/today").catch(() => null);
+          const total = r?.total ?? 0;
+          const ok = useTrain.getState().ribbon.slice(-total).filter((x) => x === "ok").length;
+          setDayDone({ newGames: r?.new_games ?? 0, ok, total });
+        }
+      }
       hes.current = { selection_changes: 0, cancelled_drags: 0, piece_selections: 0 };
       if (e.opponent_move) {
         set({ ex: e, result: null, fen: e.initial_fen, lastMove: null, servedAt: Date.now() + 10_000, candsDone: false });
@@ -175,7 +191,14 @@ function Session() {
     } catch (e: any) {
       if (my === seq.current) {
         set({ ex: null });
-        setErr(e.message);
+        if (session.kind === "own_mistakes" && hadMoments.current) {
+          // the day's session is over and no old mistake is left: its end card, not an error
+          hadMoments.current = false;
+          const r = await api.get<any>("/api/review/today").catch(() => null);
+          const total = r?.total ?? 0;
+          const ok = useTrain.getState().ribbon.slice(-total).filter((x) => x === "ok").length;
+          setDayDone({ newGames: r?.new_games ?? 0, ok, total, noMore: true });
+        } else setErr(e.message);
       }
     } finally {
       if (my === seq.current) setBusy(false);
@@ -293,7 +316,11 @@ function Session() {
   }
 
   // solution viewer
-  const solution = useMemo(() => (result?.start_fen && result.solution_uci ? walk(result.start_fen, result.solution_uci) : []), [result]);
+  const lineStart: string | undefined = result?.fen_before ?? result?.start_fen;
+  const lineUci: string[] | undefined = result?.fen_before
+    ? (lineKind === "refutation" ? result.refutation_uci : result.best_line_uci)
+    : result?.solution_uci;
+  const solution = useMemo(() => (lineStart && lineUci?.length ? walk(lineStart, lineUci) : []), [lineStart, lineUci]);
   const showStep = (i: number | null) => {
     setPreview(null);
     if (i == null || !solution.length) return setStep(null);
@@ -302,8 +329,21 @@ function Session() {
     setStep(k);
   };
   const shown = preview ?? (step != null && result
-    ? step < 0 ? { fen: result.start_fen, lastMove: null } : { fen: solution[step].fen, lastMove: solution[step].lastMove }
+    ? step < 0 ? { fen: lineStart!, lastMove: null } : { fen: solution[step].fen, lastMove: solution[step].lastMove }
     : null);
+  const showStepRef = useRef(showStep);
+  showStepRef.current = showStep;
+  // a wrong answer on a game position: the board plays your game move and the reply that punishes it
+  useEffect(() => {
+    if (!result?.fen_before) return;
+    if (!result.correct && (result.refutation_uci?.length ?? 0) >= 2) {
+      setLineKind("refutation");
+      const t1 = window.setTimeout(() => showStepRef.current(0), 450);
+      const t2 = window.setTimeout(() => showStepRef.current(1), 1400);
+      return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+    }
+    setLineKind("best");
+  }, [result]);
 
   // keyboard: Enter/Espaço próximo · E explicar · A analisar · ← → solução · Esc voltar
   useEffect(() => {
@@ -359,7 +399,10 @@ function Session() {
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h1 className="text-xl">{sessionTitle}</h1>
           {ex?.loop_phase && <span className="chip border-pen/40 text-pen">ciclo: {LOOP_PHASE[ex.loop_phase] ?? ex.loop_phase}</span>}
-          {ex && ex.mode !== "standard" && <span className="chip">{MODE_LABEL[ex.mode] ?? ex.mode}</span>}
+          {ex && ex.mode !== "standard" && ex.mode !== "daily_review" && <span className="chip">{MODE_LABEL[ex.mode] ?? ex.mode}</span>}
+          {ex?.moment && (
+            <span className="chip border-pen/40 text-pen">momento {ex.moment.index} de {ex.moment.total}{ex.moment.source === "return" ? " · revisão" : ""}</span>
+          )}
           {ex?.pressure_level && <span className="chip">nível {ex.pressure_level}</span>}
           {ex?.concept && <span className="chip">{meta.theme(ex.concept)}</span>}
           {rStep && (
@@ -372,7 +415,7 @@ function Session() {
         <div className="relative">
           {fen ? (
             <Board fen={shown?.fen ?? fen} orientation={ex?.solver_color ?? "white"} onMove={onMove}
-              interactive={!!ex && !result && !busy && !locked && !(ex.candidates && !st.candsDone) && !ex.blind && !shown}
+              interactive={!!ex && !result && !busy && !locked && !(ex.candidates && !st.candsDone) && !ex.blind && !shown && !dayDone}
               lastMove={shown ? shown.lastMove : lastMove} badges={shown ? [] : badges}
               onHesitation={(h) => (hes.current = h)} reserve={170} id="train" />
           ) : (
@@ -396,10 +439,33 @@ function Session() {
 
       <aside className="min-w-0 space-y-5">
         {err && <ErrorNote>{err}{!ex && <button className="link ml-2" onClick={() => void next()}>Tentar de novo</button>}</ErrorNote>}
-        {ex && !result && (
+        {dayDone && (
+          <div className="space-y-3 rounded-lg border border-good/40 bg-good/10 p-4">
+            <p className="text-lg font-bold text-good">Sessão do dia feita ✓</p>
+            <p className="text-sm">{dayDone.ok} de {dayDone.total} certos. O que você errou volta amanhã; o que acertou, em alguns dias.</p>
+            <div className="flex flex-wrap gap-2">
+              {dayDone.newGames > 0 && (
+                <button className="btn-primary" onClick={async () => {
+                  await api.post("/api/review/today/more").catch(() => {});
+                  setDayDone(null);
+                  void next();
+                }}>Revisar {dayDone.newGames === 1 ? "a partida nova" : `as ${dayDone.newGames} partidas novas`}</button>
+              )}
+              {!dayDone.noMore && (
+                <button className={dayDone.newGames > 0 ? "btn" : "btn-primary"} onClick={() => setDayDone(null)}>Continuar com erros antigos</button>
+              )}
+              <button className={dayDone.noMore && !dayDone.newGames ? "btn-primary" : "btn-quiet"} onClick={end}>Encerrar</button>
+            </div>
+          </div>
+        )}
+        {ex && !result && !dayDone && (
           <div className="space-y-4">
             <div>
               <p className="text-lg font-bold">{ex.solver_color === "white" ? "Brancas jogam" : "Pretas jogam"}</p>
+              {ex.context && (
+                <p className="text-sm text-muted">vs. {ex.context.opponent ?? "?"} · lance {ex.context.move_number}
+                  {ex.context.clock_s != null && <> · você tinha {clock(ex.context.clock_s * 1000)}</>}</p>
+              )}
               {ex.prompt ? <p className="text-muted">{ex.prompt}</p> : (
                 <p className="text-muted">
                   {ex.opponent_san && <>O adversário jogou <b className="text-ink"><SanText san={ex.opponent_san} /></b>. </>}
@@ -448,7 +514,18 @@ function Session() {
                   {" "}({ratingDelta >= 0 ? "+" : ""}{ratingDelta})
                 </p>
               )}
-              {result.best_san && <p className="mt-1">Melhor: <b><SanText san={result.best_san} /></b>. Na partida você jogou <SanText san={result.your_game_move} />.</p>}
+              {result.fen_before ? (
+                <div className="mt-1 space-y-1">
+                  {result.moment_label && (
+                    <span className={`chip ${result.moment_kind === "decisive" ? "border-bad/50 text-bad" : result.moment_kind === "missed" ? "border-warn/50 text-warn" : ""}`}>{result.moment_label}</span>
+                  )}
+                  <p>Melhor: <b><SanText san={result.best_san} /></b>. Na partida você jogou <SanText san={result.your_game_move} />.</p>
+                  {result.why && <p className="text-sm">{result.why}</p>}
+                  {result.time_note && <p className="text-sm font-bold text-warn">⏱ {result.time_note}</p>}
+                  <p className="text-sm text-muted">{result.next_in_days == null ? "Dominado: esta posição não volta mais."
+                    : result.next_in_days <= 1 ? "Volta amanhã." : `Volta em ${result.next_in_days} dias.`}</p>
+                </div>
+              ) : result.best_san && <p className="mt-1">Melhor: <b><SanText san={result.best_san} /></b>. Na partida você jogou <SanText san={result.your_game_move} />.</p>}
             </div>
             {rStep?.completed && (
               <div className="rounded-lg border border-good/40 bg-good/10 px-4 py-3">
@@ -459,14 +536,24 @@ function Session() {
               </div>
             )}
             <div className="flex flex-wrap gap-2">
-              <button className="btn-primary" onClick={() => void next()} disabled={busy}>Próximo puzzle <span className="kbd ml-1 border-pen-ink/30 bg-transparent text-pen-ink/80">Enter</span></button>
+              <button className="btn-primary" onClick={() => void next()} disabled={busy}>{ex?.kind === "game_position" ? "Próximo" : "Próximo puzzle"} <span className="kbd ml-1 border-pen-ink/30 bg-transparent text-pen-ink/80">Enter</span></button>
               <button className="btn" onClick={() => setExplain(true)} disabled={explain}>Explicar <span className="kbd">E</span></button>
               <button className="btn" onClick={() => setView("analysis")}>Analisar posição <span className="kbd">A</span></button>
             </div>
 
             {solution.length > 0 && (
               <div>
-                <div className="mb-1 flex items-center gap-2 text-sm text-muted">Solução <span className="text-faint">(clique ou use ← →)</span></div>
+                {result.fen_before && (result.refutation_uci?.length ?? 0) > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    <button className={`btn btn-sm ${lineKind === "refutation" ? "border-pen text-pen" : ""}`} onClick={() => { setLineKind("refutation"); setStep(null); }}>
+                      Por que <SanText san={result.your_game_move} /> falha</button>
+                    <button className={`btn btn-sm ${lineKind === "best" ? "border-pen text-pen" : ""}`} onClick={() => { setLineKind("best"); setStep(null); }}>
+                      O melhor lance</button>
+                  </div>
+                )}
+                <div className="mb-1 flex items-center gap-2 text-sm text-muted">
+                  {result.fen_before ? (lineKind === "refutation" ? "O que acontece depois do seu lance" : "A melhor linha") : "Solução"}
+                  <span className="text-faint">(clique ou use ← →)</span></div>
                 <div className="flex flex-wrap gap-1">
                   <button className={`move border border-rule ${step === -1 ? "bg-pen/15" : ""}`} onClick={() => showStep(-1)}>início</button>
                   {solution.map((m, i) => (

@@ -178,6 +178,9 @@ function TrainingSection() {
         </label>
       )}
       <Toggle checked={prefs.auto_next} onChange={(v) => set({ auto_next: v })} label="Ir para o próximo puzzle sozinho depois de um acerto" hint="Bom para o ritmo do grind. Depois de um erro ele sempre espera você." />
+      <Toggle checked={prefs.chesscom_auto_import} onChange={(v) => set({ chesscom_auto_import: v })}
+        label="Buscar minhas partidas do Chess.com ao abrir"
+        hint={prefs.chesscom_username ? `Baixa as partidas novas de ${prefs.chesscom_username} (no máximo uma vez por hora) e analisa em segundo plano. Elas viram a sessão do dia de "Seus erros de partida".` : "Importe uma vez pelo seu usuário em Partidas: depois as novas chegam sozinhas."} />
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <label><span className="label">Meta de rating no Chess.com</span>
           <input className="input w-32" inputMode="numeric" value={goal} onChange={(e) => setGoal(e.target.value)} onBlur={() => +goal >= 400 && set({ goal_rating: +goal })} /></label>

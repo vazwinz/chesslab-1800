@@ -16,7 +16,7 @@ from ..cognitive.attention import should_offer_light_day
 from ..cognitive.retention import due_concepts
 from ..models import KV, Attempt, OpeningDrill, PlanBlock, RepertoireLine, TrainingSession, utcnow
 from . import play, puzzles
-from .moments import answered, today_session
+from .moments import today_session
 from .trainer import own_mistake_pool
 
 KEY = "routine"
@@ -62,9 +62,9 @@ def _plan(db: Session, day: date, light: bool) -> list[tuple[str, int]]:
         if target > 0:
             out.append((key, target))
 
-    session = len(today_session(db, day, light)["items"])  # the day's session: its size is the target
-    if session:
-        add("own_mistakes", session)
+    own = _own_target(db, day, light)
+    if own:
+        add("own_mistakes", own)
     has_puzzles = puzzles.puzzle_count(db) > 0
     if has_puzzles:
         add("loop")
@@ -81,9 +81,13 @@ def _plan(db: Session, day: date, light: bool) -> list[tuple[str, int]]:
     return out
 
 
-def _session_left(db: Session, day: date) -> int:
-    s = today_session(db, day)
-    return len([i for i in s.get("items", []) if i["mistake_id"] not in answered(db, s)])
+def _own_target(db: Session, day: date, light: bool) -> int:
+    """The day's session of "Seus erros de partida" sets the step: its size (6 at most on a light
+    day). With no session yet (today's games may still be arriving), up to 3 old mistakes."""
+    n = len(today_session(db, day, light)["items"])
+    if n:
+        return min(n, STEPS["own_mistakes"]["light"]) if light else n
+    return min(3, len(own_mistake_pool(db)))
 
 
 def light_today(db: Session, day: date | None = None) -> bool:
@@ -175,9 +179,11 @@ def today(db: Session, day: date | None = None) -> dict:
     for r in steps:
         s = STEPS[r.key]
         target = targets.get(r.key) or s["light" if r.light_day else "target"] or s["target"]
+        if r.key == "own_mistakes":  # follows the session, which takes in the games that arrive later
+            target = _own_target(db, day, r.light_day)
         done = _done(db, r.key, day)
         # nothing left to do in that mode counts as done (every mistake already seen, nothing due)
-        exhausted = (r.key == "own_mistakes" and _session_left(db, day) == 0 and not own_mistake_pool(db)) or \
+        exhausted = (r.key == "own_mistakes" and target == 0) or \
                     (r.key == "retention" and not due_concepts(db, limit=1))
         if not r.completed and (done >= target or exhausted):
             r.completed, r.completed_at, changed = True, utcnow(), True

@@ -107,11 +107,13 @@ def _item(m: GameMistake, g: Game, source: str) -> dict:
             "source": source}
 
 
-def _window_games(db: Session, day: date, days_back: int) -> list[Game]:
+def _window_games(db: Session, day: date, days_back: int, again: str | None = None) -> list[Game]:
+    """Analysed games of the last `days_back` days not looked at yet (`again`: also those looked at
+    on that day, when an untouched session is rebuilt)."""
     gs = db.execute(select(Game).where(Game.analyzed.is_(True), Game.user_color.is_not(None),
                                        Game.played_on >= day - timedelta(days=days_back), Game.played_on <= day)
                     .order_by(Game.played_on.desc(), Game.id.desc())).scalars()
-    return [g for g in gs if not (g.metrics or {}).get("reviewed_on")]
+    return [g for g in gs if (g.metrics or {}).get("reviewed_on") in (None, again)]
 
 
 def _candidates(db: Session, games: list[Game]) -> list[tuple[float, GameMistake, Game]]:
@@ -189,15 +191,19 @@ def answered(db: Session, session: dict) -> set[int]:
         Attempt.finished_at.is_not(None), Attempt.finished_at >= since)).scalars())
 
 
-def build_session(db: Session, day: date, light: bool) -> dict:
+def build_session(db: Session, day: date, light: bool, rebuild: bool = False) -> dict:
     """Build (and keep) the session of `day`: yesterday's unanswered moments, then the day's new
-    moments mixed with the positions due again."""
+    moments mixed with the positions due again. `rebuild`: the stored session of the same day was not
+    started, so its games are looked at again together with the ones that arrived since."""
     prev = _stored(db)
     carry: list[int] = []
-    if prev and prev.get("day") and prev["day"] < day.isoformat():
+    again = None
+    if rebuild and prev and prev.get("day") == day.isoformat():
+        carry, again = list(prev.get("carry") or []), day.isoformat()
+    elif prev and prev.get("day") and prev["day"] < day.isoformat():
         done = answered(db, prev)
         carry = [i["mistake_id"] for i in prev.get("items", []) if i["mistake_id"] not in done]
-    games = _window_games(db, day, 1) or _window_games(db, day, 3)
+    games = _window_games(db, day, 1, again) or _window_games(db, day, 3, again)
     new = _order(_pick(_candidates(db, games), NEW[light], set(carry)))
     new_ids = {m.id for m, _ in new}
     ret_ids = [mid for mid in dict.fromkeys(carry + due_returns(db, day, RETURNS[light] + len(carry)))
@@ -215,16 +221,20 @@ def build_session(db: Session, day: date, light: bool) -> dict:
         if rest:
             items.append(rest.pop(0))
     _mark_reviewed(games, day)
-    session = {"day": day.isoformat(), "items": items, "built_at": utcnow().isoformat(), "light": light}
+    session = {"day": day.isoformat(), "items": items, "built_at": utcnow().isoformat(), "light": light,
+               "carry": carry}
     _save(db, session)
     return session
 
 
 def today_session(db: Session, day: date | None = None, light: bool | None = None) -> dict:
-    """The session of `day` (today), built on first use and kept for the rest of the day."""
+    """The session of `day` (today), built on first use. Once you have answered a moment it stays as
+    it is (later games are a second round); until then it takes in the games that arrive."""
     day = day or date.today()
     s = _stored(db)
     if s and s.get("day") == day.isoformat():
+        if not answered(db, s) and new_games_since(db, s) > 0:
+            return build_session(db, day, bool(s.get("light")) if light is None else light, rebuild=True)
         return s
     return build_session(db, day, bool(light))
 

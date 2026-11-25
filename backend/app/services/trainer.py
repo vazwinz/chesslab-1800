@@ -232,6 +232,9 @@ def next_exercise(db: Session, sess: TrainingSession) -> dict:
             if ex is not None:
                 ex["moment"] = None
         if ex is None:
+            if moments.today_session(db).get("items"):
+                raise NoExercise("Sessão do dia feita. Não há outro erro de partida para revisar agora: "
+                                 "os que você viu voltam nos próximos dias.")
             raise NoExercise("Ainda não há erros de partidas analisadas. Importe suas partidas em Partidas e espere a análise.")
         db.commit()
         return ex

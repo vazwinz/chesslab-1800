@@ -20,6 +20,7 @@ export type Prefs = {
   goal_rating: number;
   goal_time_class: "auto" | "bullet" | "blitz" | "rapid" | "daily";
   chesscom_username: string;
+  chesscom_auto_import: boolean;
   arrows_best: boolean;
   arrows_played: boolean;
   arrows_opponent: boolean;
@@ -38,7 +39,7 @@ export type Prefs = {
 export const DEFAULT_PREFS: Prefs = {
   theme: "system", board_theme: "grafite", show_coordinates: true, show_legal_moves: true, animation_ms: 180, motion: "system",
   sound: true, volume: 0.7, auto_next: false, notation: "figurine", tour_done: true, player_names: "",
-  update_check: true, dismissed_version: null, goal_rating: 1800, goal_time_class: "auto", chesscom_username: "",
+  update_check: true, dismissed_version: null, goal_rating: 1800, goal_time_class: "auto", chesscom_username: "", chesscom_auto_import: true,
   arrows_best: true, arrows_played: true, arrows_opponent: true, arrows_others: true,
   play_alarm: "forte", play_color: "white", play_clock: "none", play_hints: 3,
   play_auto_level: true, play_level: 1000, play_show_eval: false, play_punish: true, play_praise: true,

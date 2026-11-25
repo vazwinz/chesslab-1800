@@ -149,3 +149,29 @@ def test_own_mistakes_target_is_the_session_size(db):
     steps = {s["key"]: s for s in routine.today(db)["steps"]}
     assert steps["own_mistakes"]["target"] == 2 and steps["own_mistakes"]["unit"] == "momentos"
     assert steps["own_mistakes"]["title"] == "Seus erros de partida"
+
+
+def test_own_mistakes_step_follows_the_session_when_games_arrive_later(db):
+    """The start screen plans the day before the Chess.com import finishes: the step is there (an
+    old mistake waits in the pool) and its target follows the session once today's games arrive."""
+    from datetime import date, timedelta
+
+    from app.services import routine
+
+    def game_with_mistake(fp: str, played: date) -> None:
+        g = Game(fingerprint=fp, pgn="", white="TestUser", black="Rival", result="0-1", user_color="white",
+                 source="chess.com", played_on=played, analyzed=True, metrics={"criteria": 2})
+        db.add(g)
+        db.flush()
+        db.add(GameMistake(game_id=g.id, ply=10, fen_before=chess.STARTING_FEN, move_uci="f2f3", move_san="f3",
+                           best_uci="e2e4", best_san="e4", eval_before_cp=30, eval_after_cp=-160, cp_loss=190,
+                           win_pct_loss=20.0, severity="mistake", phase="opening", category="tactical_blindness"))
+        db.commit()
+
+    game_with_mistake("old", date.today() - timedelta(days=30))
+    steps = {s["key"]: s for s in routine.today(db)["steps"]}
+    assert steps["own_mistakes"]["target"] == 1 and not steps["own_mistakes"]["completed"]
+    game_with_mistake("today-1", date.today())
+    game_with_mistake("today-2", date.today())
+    steps = {s["key"]: s for s in routine.today(db)["steps"]}
+    assert steps["own_mistakes"]["target"] == 2

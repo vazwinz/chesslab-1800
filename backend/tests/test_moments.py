@@ -7,7 +7,7 @@ from itertools import count
 
 import pytest
 
-from app.models import Attempt, Game, GameMistake
+from app.models import Attempt, Game, GameMistake, utcnow
 from app.services import moments
 
 TODAY = date(2026, 11, 25)
@@ -130,16 +130,30 @@ def test_decisive_moments_outrank_bigger_common_drops(db):
     assert len(others) == 5
 
 
-def test_session_is_built_once_a_day(db):
-    _mistake(db, _game(db))
+def test_a_started_session_does_not_change(db):
+    m = _mistake(db, _game(db))
     first = moments.today_session(db, TODAY)
-    _mistake(db, _game(db))  # a game that arrives after the session was built
+    _attempt(db, m, False, utcnow() + timedelta(seconds=1), mode="daily_review")  # you started it
+    _mistake(db, _game(db))  # a game that arrives after that
     again = moments.today_session(db, TODAY)
     assert again["items"] == first["items"]
     assert moments.new_games_since(db, again) == 1
     more = moments.second_round(db, TODAY)
     assert len(more["items"]) == len(first["items"]) + 1
     assert moments.new_games_since(db, more) == 0
+
+
+def test_an_untouched_session_takes_the_games_that_arrive_later(db):
+    """The start screen plans the day before the Chess.com import has finished: an empty (or
+    unanswered) session must not keep today's games out."""
+    empty = moments.today_session(db, TODAY)
+    assert empty["items"] == []
+    m = _mistake(db, _game(db))
+    again = moments.today_session(db, TODAY)
+    assert [i["mistake_id"] for i in again["items"]] == [m.id]
+    assert moments.new_games_since(db, again) == 0
+    m2 = _mistake(db, _game(db), loss=50.0)  # still untouched: rebuilt again, best first
+    assert moments.today_session(db, TODAY)["items"][0]["mistake_id"] == m2.id
 
 
 def test_no_games_today_uses_returns_and_the_last_three_days(db):

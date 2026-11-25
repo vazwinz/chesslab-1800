@@ -24,6 +24,9 @@ export type Exercise = {
   intervention?: { intervention: string; interleaved?: boolean };
   prompt?: string;
   complexity?: number;
+  /** a moment of today's session of "Seus erros de partida" (null: the old pool after it) */
+  moment?: { index: number; total: number; source: "new" | "return" } | null;
+  context?: { opponent: string | null; move_number: number; clock_s: number | null };
 };
 
 export type Ribbon = "ok" | "bad" | "time";

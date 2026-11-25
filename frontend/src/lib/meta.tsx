@@ -40,7 +40,7 @@ export const SESSION_KINDS: Record<string, string> = {
 };
 export const MODE_LABEL: Record<string, string> = {
   standard: "Puzzle", assessment: "Medição", intervention: "Intervenção", retention: "Revisão", pressure: "Pressão",
-  blind: "Às cegas", candidates: "Candidatos",
+  blind: "Às cegas", candidates: "Candidatos", daily_review: "Sessão do dia",
 };
 export const LOOP_PHASE: Record<string, string> = {
   measure: "medir", diagnose: "diagnosticar", intervene: "intervir", practice: "praticar", reassess: "reavaliar",
@@ -57,5 +57,5 @@ export const TRAIN_MODES: { kind: string; when: string; help?: string }[] = [
   { kind: "retention", when: "Revisa os temas que estão na hora, com posições novas.", help: "retention" },
   { kind: "pressure", when: "Relógio cada vez mais curto. Use se você erra muito com pouco tempo nas partidas.", help: "pressure" },
   { kind: "endgame", when: "Puzzles de final do banco do Lichess." },
-  { kind: "own_mistakes", when: "Posições em que você errou nas suas partidas. Ache o lance melhor." },
+  { kind: "own_mistakes", when: "Começa pelos momentos que mais valem das suas partidas de hoje e pelos que voltam para revisão. Ache o lance melhor." },
 ];

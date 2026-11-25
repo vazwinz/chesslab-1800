@@ -78,3 +78,12 @@ def test_review_today_reports_progress(client, db):
     ex = client.post(f"/api/sessions/{_start(client)}/next").json()
     client.post(f"/api/attempts/{ex['attempt_id']}/give-up", json={"elapsed_ms": 1000})
     assert client.get("/api/review/today").json()["done"] == 1
+
+
+def test_after_the_session_with_nothing_old_left_it_says_the_session_is_done(client, db):
+    _seed(db, 1)
+    sid = _start(client)
+    ex = client.post(f"/api/sessions/{sid}/next").json()
+    client.post(f"/api/attempts/{ex['attempt_id']}/give-up", json={"elapsed_ms": 1000})
+    r = client.post(f"/api/sessions/{sid}/next")
+    assert r.status_code >= 400 and "Sessão do dia feita" in r.json()["detail"]
