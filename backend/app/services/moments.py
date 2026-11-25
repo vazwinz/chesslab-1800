@@ -48,6 +48,19 @@ def kind_of(wins: list[float | None] | None, ply: int) -> str:
     return "common"
 
 
+def time_note(kind: str, think_s: float | None, median_think_s: float | None) -> str | None:
+    """A line for a fast decision on a move that decided the game (or threw away a gift): under 5 s,
+    or under half your usual time in that game."""
+    if kind not in ("decisive", "missed") or think_s is None:
+        return None
+    if not (think_s < 5 or (median_think_s and think_s < 0.5 * median_think_s)):
+        return None
+    s = f"{think_s:.1f}".replace(".", ",") if think_s < 2 else str(round(think_s))
+    if kind == "decisive":
+        return f"Você pensou {s} s no lance que decidiu a partida."
+    return f"Você pensou {s} s na chance que ele te deu."
+
+
 # ------------------------------------------------------------------ the ladder
 def ladder(history: list[tuple[bool, datetime]]) -> tuple[date | None, int]:
     """(the date the position is due again, its step 0..4) from its answers in order; None = mastered.

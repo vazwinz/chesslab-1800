@@ -4,6 +4,7 @@ import AnalysisBoard from "../components/AnalysisBoard";
 import Board, { Badge, Hesitation } from "../components/Board";
 import Explain from "../components/Explain";
 import Help from "../components/Help";
+import { RuleSuggestion } from "../components/RuleCard";
 import { Empty, ErrorNote, PageHeader, SanText, Spinner } from "../components/ui";
 import { nextStep, stepFor, useRoutine } from "../lib/routine";
 import { api } from "../lib/api";
@@ -443,6 +444,7 @@ function Session() {
           <div className="space-y-3 rounded-lg border border-good/40 bg-good/10 p-4">
             <p className="text-lg font-bold text-good">Sessão do dia feita ✓</p>
             <p className="text-sm">{dayDone.ok} de {dayDone.total} certos. O que você errou volta amanhã; o que acertou, em alguns dias.</p>
+            <RuleSuggestion />
             <div className="flex flex-wrap gap-2">
               {dayDone.newGames > 0 && (
                 <button className="btn-primary" onClick={async () => {
@@ -502,7 +504,7 @@ function Session() {
           </div>
         )}
 
-        {result && (
+        {result && !dayDone && (
           <div className="space-y-5">
             <div>
               <p className={`text-xl font-bold ${severityTone}`}>

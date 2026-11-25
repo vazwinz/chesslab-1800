@@ -561,6 +561,7 @@ def finish(db: Session, a: Attempt, correct: bool, total_ms: int, hesitation: di
                     "best_line_uci": best_line, "best_line_san": _sans(gm.fen_before, best_line),
                     "moment_kind": kind, "moment_label": moments.KIND_LABEL[kind],
                     "why": motifs.describe(gm.fen_before, refutation),
+                    "time_note": moments.time_note(kind, gm.think_s, (g.metrics or {}).get("median_think_s") if g else None),
                     "next_in_days": moments.next_return_in(db, gm.id)})
     if a.candidates:
         out["candidates"] = _score_candidates(db, a)
