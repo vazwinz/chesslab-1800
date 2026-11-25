@@ -334,12 +334,20 @@ def test_update_now_refuses_with_a_reason(client, monkeypatch, windows_install, 
     monkeypatch.setattr(import_jobs, "_state", {"status": "running"})
     r = client.post("/api/update/start")
     assert r.status_code == 409 and "importação de puzzles" in r.json()["detail"]
-    monkeypatch.setattr(import_jobs, "_state", {"status": "done"})
-    monkeypatch.setattr(game_jobs, "_state", {"status": "running"})
-    r = client.post("/api/update/start")
-    assert r.status_code == 409 and "análise das suas partidas" in r.json()["detail"]
     _, launched, quits = windows_install
     assert not launched and not quits and client.get("/api/update/job").json()["status"] == "idle"
+
+
+def test_update_cancels_a_running_game_analysis(monkeypatch, fresh):
+    """The analysis now runs on its own after every import: the update pauses it instead of
+    refusing, and the next start queues what is left (game_jobs.resume)."""
+    from app.services import game_jobs
+
+    calls = []
+    monkeypatch.setattr(game_jobs, "_state", {"status": "running"})
+    monkeypatch.setattr(game_jobs, "cancel", lambda: calls.append("cancel") or {})
+    assert updater._busy_reason() is None
+    assert calls == ["cancel"]
 
 
 def test_running_from_source_never_updates_itself(client, monkeypatch, fresh):

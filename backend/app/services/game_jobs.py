@@ -21,6 +21,7 @@ _cancel = threading.Event()
 _queue: deque = deque()
 _worker: threading.Thread | None = None
 _state: dict = {"status": "idle"}
+QUICK_DEPTH = 12  # the first pass: a game is reviewable in seconds; the deep pass (settings depth) follows
 
 
 def state() -> dict:
@@ -63,15 +64,27 @@ def _ensure_worker() -> None:
         _worker.start()
 
 
-def enqueue_analysis(ids: list[int], depth: int | None = None) -> dict:
+def _tasks(ids: list[int], depth: int | None, two_pass: bool) -> list[tuple]:
+    if two_pass:  # every game reviewable within seconds, then the deep pass refines them all
+        return [("analyze", gid, QUICK_DEPTH) for gid in ids] + [("analyze", gid, None) for gid in ids]
+    return [("analyze", gid, depth) for gid in ids]
+
+
+def _append(tasks: list[tuple]) -> None:
+    """Queue analysis tasks not already waiting or running (the same game may wait for both passes).
+    Call with _lock held."""
+    have = {(t[1], t[2]) for t in _queue if t[0] == "analyze"}
+    if _state.get("status") == "running" and _state.get("game_id") is not None:
+        have.add((_state["game_id"], _state.get("depth")))
+    for t in tasks:
+        if (t[1], t[2]) not in have:
+            _queue.append(t)
+            have.add((t[1], t[2]))
+
+
+def enqueue_analysis(ids: list[int], depth: int | None = None, two_pass: bool = False) -> dict:
     with _lock:
-        have = {t[1] for t in _queue if t[0] == "analyze"}
-        if _state.get("status") == "running" and _state.get("game_id") is not None:
-            have.add(_state["game_id"])
-        for gid in ids:
-            if gid not in have:
-                _queue.append(("analyze", gid, depth))
-                have.add(gid)
+        _append(_tasks(ids, depth, two_pass))
         if _state.get("status") != "running":
             _state.clear()
             _state.update({"status": "running", "phase": "analysis", "done": 0, "total": 0, "errors": [],
@@ -79,6 +92,24 @@ def enqueue_analysis(ids: list[int], depth: int | None = None) -> dict:
         _state["total"] = _state.get("done", 0) + sum(1 for t in _queue if t[0] == "analyze")
     _ensure_worker()
     return state()
+
+
+def deep_pending_ids(db) -> list[int]:
+    """Games that had only the quick pass, newest first."""
+    gs = db.execute(select(Game).where(Game.analyzed.is_(True), Game.user_color.is_not(None))
+                    .order_by(Game.played_on.desc().nulls_last(), Game.id.desc())).scalars()
+    return [g.id for g in gs if (g.metrics or {}).get("deep") == "pending"]
+
+
+def resume(db) -> dict | None:
+    """At start: whatever an update or closing the app interrupted (games never analysed get both
+    passes, quick-only games the deep one). Old-criteria games wait for the owner to ask."""
+    todo, deep = pending_ids(db), deep_pending_ids(db)
+    if not todo and not deep:
+        return None
+    if todo:
+        enqueue_analysis(todo, two_pass=True)
+    return enqueue_analysis(deep) if deep else state()
 
 
 def enqueue_chesscom(username: str, months: int, analyze: bool) -> dict:
@@ -122,7 +153,7 @@ def _run() -> None:
                 if g is None or g.user_color is None:
                     _set(done=state()["done"] + 1)
                     continue
-                _set(phase="analysis", game_id=gid, current=f"{g.white} × {g.black}" + (f" ({g.played_on})"
+                _set(phase="analysis", game_id=gid, depth=depth, current=f"{g.white} × {g.black}" + (f" ({g.played_on})"
                                                                                          if g.played_on else ""))
                 t0 = time.time()
                 analyze_game(db, g, get_engine("background"), depth, should_stop=_cancel.is_set)
@@ -177,6 +208,5 @@ def _chesscom(username: str, months: int, analyze: bool) -> None:
         with SessionLocal() as db:
             ids = [gid for gid in pending_ids(db) if gid in set(new_ids)]
         with _lock:
-            for gid in ids:
-                _queue.append(("analyze", gid, None))
+            _append(_tasks(ids, None, two_pass=True))
             _state["total"] = _state.get("done", 0) + sum(1 for t in _queue if t[0] == "analyze")

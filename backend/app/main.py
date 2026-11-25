@@ -29,6 +29,15 @@ async def lifespan(app: FastAPI):
         updater.cleanup()
     except Exception:
         log.exception("update cleanup failed")
+    if settings.background_jobs:
+        try:  # what an update or closing the app interrupted, and today's Chess.com games
+            from .db import SessionLocal
+            from .services import game_jobs
+
+            with SessionLocal() as db:
+                game_jobs.resume(db)
+        except Exception:
+            log.exception("resuming the game analysis failed")
     yield
     from .services.engine import close_all
 

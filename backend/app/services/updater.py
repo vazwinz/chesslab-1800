@@ -302,7 +302,10 @@ def _busy_reason() -> str | None:
     if import_jobs.state().get("status") == "running":
         return "A importação de puzzles está em andamento: espere terminar e atualize depois."
     if game_jobs.state().get("status") == "running":
-        return "A análise das suas partidas está em andamento: espere terminar (ou pare em Partidas) e atualize depois."
+        # paused, not refused: the analysis runs after every import, and the next start queues what
+        # is left (game_jobs.resume)
+        game_jobs.cancel()
+        log.info("update: game analysis paused; it resumes at the next start")
     return None
 
 

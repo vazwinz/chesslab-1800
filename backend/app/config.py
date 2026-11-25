@@ -60,6 +60,8 @@ class Settings:
     coach_depth: int = field(default_factory=lambda: int(os.getenv("COACH_DEPTH", "18")))
     # public GitHub repository whose Releases announce new versions (empty = never check)
     update_repo: str = field(default_factory=lambda: os.getenv("AURA_UPDATE_REPO", "vazwinz/chesslab-1800"))
+    # resume the game analysis and import Chess.com games on their own (off in the tests)
+    background_jobs: bool = field(default_factory=lambda: os.getenv("AURA_BACKGROUND_JOBS", "1") != "0")
 
 
 settings = Settings()
